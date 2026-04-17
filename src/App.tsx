@@ -1,8 +1,9 @@
-import {
+import React, {
   useState,
   useRef,
   useCallback,
   useEffect,
+  useMemo,
   type DragEvent,
 } from "react";
 import {
@@ -45,6 +46,7 @@ import {
 } from "@/components/ui/collapsible";
 import {
   ChevronDown,
+  ChevronRight,
   Brain,
   Upload,
   ScanSearch,
@@ -56,7 +58,10 @@ import {
   ZoomIn,
   ZoomOut,
   RotateCcw,
+  FileText,
+  AlertCircle,
 } from "lucide-react";
+import { renderPdfPages } from "@/pdf";
 
 const DEFAULT_MODEL = "gemma-4-26b-a4b-it";
 const API_KEY_STORAGE = "gemini-api-key";
@@ -91,6 +96,13 @@ const SDK_THINKING_LEVEL_MAP: Partial<Record<ThinkingLevel, SDKThinkingLevel>> =
 type Box = {
   box_2d: [number, number, number, number];
   label: string;
+};
+
+type PageResult = {
+  pageIndex: number;
+  imageDataUrl: string;
+  boxes: Box[];
+  error?: string;
 };
 
 const BoxSchema = z.object({
@@ -129,7 +141,7 @@ function ZoomControls() {
   );
 }
 
-function readFileAsBase64(file: File): Promise<string> {
+function blobToBase64(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => {
@@ -137,8 +149,177 @@ function readFileAsBase64(file: File): Promise<string> {
       resolve(result.split(",")[1]!);
     };
     reader.onerror = reject;
-    reader.readAsDataURL(file);
+    reader.readAsDataURL(blob);
   });
+}
+
+function ResultsSidebar({
+  pages,
+  currentPageIndex,
+  selectedIndex,
+  onSelectBox,
+  variant,
+}: {
+  pages: PageResult[];
+  currentPageIndex: number;
+  selectedIndex: number | null;
+  onSelectBox: (pageIdx: number, boxIdx: number | null) => void;
+  variant: "mobile" | "desktop";
+}) {
+  const isMultiPage = pages.length > 1;
+  const totalBoxes = pages.reduce((sum, p) => sum + p.boxes.length, 0);
+  const hasAnyBoxes = totalBoxes > 0;
+
+  const renderBoxList = (pageBoxes: Box[], pageIdx: number, isMobile: boolean) => (
+    <ul className={isMobile ? "flex flex-wrap gap-1" : "space-y-px"}>
+      {pageBoxes.map((box, i) => {
+        const isSelected = currentPageIndex === pageIdx && selectedIndex === i;
+        return (
+          <li key={i} className="animate-fade-in-up" style={{ animationDelay: `${i * 40}ms` }}>
+            <button
+              className={`${
+                isMobile
+                  ? "inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs"
+                  : "flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs"
+              } transition-colors ${
+                isSelected
+                  ? "bg-secondary text-secondary-foreground"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground"
+              }`}
+              onClick={() => onSelectBox(pageIdx, isSelected ? null : i)}
+            >
+              <span
+                className="size-2 shrink-0 rounded-full"
+                style={{ backgroundColor: isSelected ? HIGHLIGHT_COLOR : BOX_COLOR }}
+              />
+              <span className="truncate">{box.label}</span>
+            </button>
+          </li>
+        );
+      })}
+    </ul>
+  );
+
+  const isMobile = variant === "mobile";
+
+  if (!isMultiPage) {
+    // Single image: flat list (original behavior)
+    const currentBoxes = pages[0]?.boxes ?? [];
+    return (
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between px-1">
+          <span className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground">Detected</span>
+          {currentBoxes.length > 0 && (
+            <span className="rounded-full bg-primary/10 px-1.5 py-px font-mono text-[10px] font-semibold text-primary tabular-nums">
+              {currentBoxes.length}
+            </span>
+          )}
+        </div>
+        {currentBoxes.length > 0 ? (
+          renderBoxList(currentBoxes, 0, isMobile)
+        ) : (
+          <p className="px-1 text-xs text-muted-foreground/50">No detections yet</p>
+        )}
+      </div>
+    );
+  }
+
+  // Multi-page: grouped by page
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between px-1">
+        <span className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground">Detected</span>
+        {hasAnyBoxes && (
+          <span className="rounded-full bg-primary/10 px-1.5 py-px font-mono text-[10px] font-semibold text-primary tabular-nums">
+            {totalBoxes}
+          </span>
+        )}
+      </div>
+      <div className="space-y-1">
+        {pages.map((page) => {
+          const hasResults = page.boxes.length > 0;
+          const hasError = !!page.error;
+          const isCurrentPage = page.pageIndex === currentPageIndex;
+          const defaultOpen = hasResults || hasError || isCurrentPage;
+
+          return (
+            <PageGroup
+              key={page.pageIndex}
+              page={page}
+              isCurrentPage={isCurrentPage}
+              defaultOpen={defaultOpen}
+              isMobile={isMobile}
+              onSelectBox={onSelectBox}
+              currentPageIndex={currentPageIndex}
+              selectedIndex={selectedIndex}
+              renderBoxList={renderBoxList}
+            />
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function PageGroup({
+  page,
+  isCurrentPage,
+  defaultOpen,
+  isMobile,
+  onSelectBox,
+  currentPageIndex,
+  selectedIndex,
+  renderBoxList,
+}: {
+  page: PageResult;
+  isCurrentPage: boolean;
+  defaultOpen: boolean;
+  isMobile: boolean;
+  onSelectBox: (pageIdx: number, boxIdx: number | null) => void;
+  currentPageIndex: number;
+  selectedIndex: number | null;
+  renderBoxList: (boxes: Box[], pageIdx: number, isMobile: boolean) => React.ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+
+  return (
+    <div className={`rounded-md ${
+      isCurrentPage ? "bg-muted/50 ring-1 ring-border" : ""
+    }`}>
+      <button
+        className="flex w-full items-center gap-1.5 px-2 py-1.5 text-left text-xs font-medium transition-colors hover:bg-muted/70"
+        onClick={() => setOpen(!open)}
+      >
+        {open ? (
+          <ChevronDown className="size-3 shrink-0 text-muted-foreground" />
+        ) : (
+          <ChevronRight className="size-3 shrink-0 text-muted-foreground" />
+        )}
+        <FileText className="size-3 shrink-0 text-muted-foreground" />
+        <span>Page {page.pageIndex + 1}</span>
+        {page.boxes.length > 0 && (
+          <span className="ml-auto rounded-full bg-primary/10 px-1.5 py-px font-mono text-[10px] font-semibold text-primary tabular-nums">
+            {page.boxes.length}
+          </span>
+        )}
+        {page.error && (
+          <AlertCircle className="ml-auto size-3 text-destructive" />
+        )}
+      </button>
+      {open && (
+        <div className="px-2 pb-2">
+          {page.error && (
+            <p className="text-xs text-destructive mb-1">{page.error}</p>
+          )}
+          {page.boxes.length > 0 ? (
+            renderBoxList(page.boxes, page.pageIndex, isMobile)
+          ) : !page.error ? (
+            <p className="text-xs text-muted-foreground/50">No detections</p>
+          ) : null}
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function App() {
@@ -149,17 +330,18 @@ export default function App() {
   const [ready, setReady] = useState(
     () => !!localStorage.getItem(API_KEY_STORAGE),
   );
-  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [pages, setPages] = useState<PageResult[]>([]);
+  const [currentPageIndex, setCurrentPageIndex] = useState(0);
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [objects, setObjects] = useState<string[]>([]);
   const [objectInput, setObjectInput] = useState("");
-  const [boxes, setBoxes] = useState<Box[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [thinkingText, setThinkingText] = useState("");
   const [thinkingOpen, setThinkingOpen] = useState(false);
+  const [pagesCompleted, setPagesCompleted] = useState(0);
   const [usageMetadata, setUsageMetadata] = useState<Pick<
     GenerateContentResponseUsageMetadata,
     "promptTokenCount" | "candidatesTokenCount" | "thoughtsTokenCount" | "totalTokenCount"
@@ -189,12 +371,33 @@ export default function App() {
     setReady(false);
   };
 
-  const handleFile = useCallback((file: File) => {
-    setImageFile(file);
-    setImageUrl(URL.createObjectURL(file));
-    setBoxes([]);
+  const handleFile = useCallback(async (file: File) => {
     setError(null);
     setSelectedIndex(null);
+    setCurrentPageIndex(0);
+
+    const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+
+    if (isPdf) {
+      try {
+        const { images } = await renderPdfPages(file);
+        const pageResults: PageResult[] = images.map((dataUrl, i) => ({
+          pageIndex: i,
+          imageDataUrl: dataUrl,
+          boxes: [],
+        }));
+        setPages(pageResults);
+        setImageFile(file);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to load PDF");
+        setPages([]);
+        setImageFile(null);
+      }
+    } else {
+      const objectUrl = URL.createObjectURL(file);
+      setPages([{ pageIndex: 0, imageDataUrl: objectUrl, boxes: [] }]);
+      setImageFile(file);
+    }
   }, []);
 
   const handleDrop = useCallback(
@@ -202,115 +405,254 @@ export default function App() {
       e.preventDefault();
       setDragOver(false);
       const file = e.dataTransfer.files[0];
-      if (file?.type.startsWith("image/")) handleFile(file);
+      if (file && (file.type.startsWith("image/") || file.type === "application/pdf")) {
+        handleFile(file);
+      }
     },
     [handleFile],
   );
 
+  const detectSinglePage = async (
+    imageDataUrl: string,
+    object: string,
+    ai: GoogleGenAI,
+  ): Promise<{ boxes: Box[]; thinkingText: string; usageMetadata: typeof usageMetadata }> => {
+    // Convert data URL or object URL to base64
+    let base64: string;
+    let mimeType: string;
+
+    if (imageDataUrl.startsWith("data:")) {
+      const [header, data] = imageDataUrl.split(",");
+      base64 = data!;
+      mimeType = header!.match(/data:(.*?);/)?.[1] ?? "image/png";
+    } else {
+      // Object URL — need to fetch and convert
+      const resp = await fetch(imageDataUrl);
+      const blob = await resp.blob();
+      mimeType = blob.type || "image/png";
+      base64 = await blobToBase64(blob);
+    }
+
+    const prompt = promptTemplate.replace(/\{\{object\}\}/g, object.trim());
+
+    const sdkLevel = SDK_THINKING_LEVEL_MAP[thinkingLevel];
+    const thinkingConfig =
+      thinkingLevel === "none" || !sdkLevel
+        ? undefined
+        : { thinkingLevel: sdkLevel, includeThoughts: true };
+
+    const stream = await ai.models.generateContentStream({
+      model,
+      config: {
+        temperature,
+        ...(thinkingConfig ? { thinkingConfig } : {}),
+      },
+      contents: [
+        {
+          role: "user",
+          parts: [
+            { text: prompt },
+            { inlineData: { data: base64, mimeType } },
+          ],
+        },
+      ],
+    });
+
+    let fullText = "";
+    let fullThinking = "";
+    let lastUsage: typeof usageMetadata = null;
+
+    for await (const chunk of stream) {
+      const candidate = chunk.candidates?.[0];
+      if (
+        candidate?.finishReason &&
+        candidate.finishReason !== FinishReason.STOP &&
+        candidate.finishReason !== FinishReason.MAX_TOKENS
+      ) {
+        throw new Error(`Model response blocked: ${candidate.finishReason}`);
+      }
+
+      for (const part of candidate?.content?.parts ?? []) {
+        if (part.thought && part.text) {
+          fullThinking += part.text;
+        } else if (part.text) {
+          fullText += part.text;
+        }
+      }
+
+      if (chunk.usageMetadata) {
+        lastUsage = {
+          promptTokenCount: chunk.usageMetadata.promptTokenCount,
+          candidatesTokenCount: chunk.usageMetadata.candidatesTokenCount,
+          thoughtsTokenCount: chunk.usageMetadata.thoughtsTokenCount,
+          totalTokenCount: chunk.usageMetadata.totalTokenCount,
+        };
+      }
+    }
+
+    const jsonMatch = fullText.match(/\[\s*\{[\s\S]*?\}\s*\]/);
+    if (!jsonMatch) {
+      throw new Error("No bounding boxes found in model response");
+    }
+
+    const parsed = JSON.parse(jsonMatch[0]);
+    const detectedBoxes = BoxesSchema.parse(parsed);
+    return { boxes: detectedBoxes, thinkingText: fullThinking, usageMetadata: lastUsage };
+  };
+
   const handleDetect = async () => {
     const allObjects = [...objects];
     if (objectInput.trim()) allObjects.push(objectInput.trim());
-    if (!imageFile || allObjects.length === 0 || !apiKey.trim()) return;
+    if (pages.length === 0 || allObjects.length === 0 || !apiKey.trim()) return;
     const object = allObjects.join(", ");
     setLoading(true);
     setError(null);
-    setBoxes([]);
+    setPages((prev) => prev.map((p) => ({ ...p, boxes: [], error: undefined })));
     setSelectedIndex(null);
     setThinkingText("");
     setThinkingOpen(false);
     setUsageMetadata(null);
+    setPagesCompleted(0);
 
-    try {
-      const base64 = await readFileAsBase64(imageFile);
-      const mimeType = imageFile.type || "image/png";
+    const ai = new GoogleGenAI({ apiKey: apiKey.trim() });
+    const isSinglePage = pages.length === 1;
 
-      const ai = new GoogleGenAI({ apiKey: apiKey.trim() });
+    if (isSinglePage) {
+      // Single page: use streaming with thinking display (original behavior)
+      try {
+        const page = pages[0]!;
+        let base64: string;
+        let mimeType: string;
 
-      const prompt = promptTemplate.replace(
-        /\{\{object\}\}/g,
-        object.trim(),
-      );
-
-      const sdkLevel = SDK_THINKING_LEVEL_MAP[thinkingLevel];
-      const thinkingConfig =
-        thinkingLevel === "none" || !sdkLevel
-          ? undefined
-          : {
-              thinkingLevel: sdkLevel,
-              includeThoughts: true,
-            };
-
-      const stream = await ai.models.generateContentStream({
-        model,
-        config: {
-          temperature,
-          ...(thinkingConfig ? { thinkingConfig } : {}),
-        },
-        contents: [
-          {
-            role: "user",
-            parts: [
-              { text: prompt },
-              { inlineData: { data: base64, mimeType } },
-            ],
-          },
-        ],
-      });
-
-      let fullText = "";
-      let fullThinking = "";
-      let openedThinking = false;
-
-      for await (const chunk of stream) {
-        const candidate = chunk.candidates?.[0];
-        if (
-          candidate?.finishReason &&
-          candidate.finishReason !== FinishReason.STOP &&
-          candidate.finishReason !== FinishReason.MAX_TOKENS
-        ) {
-          throw new Error(`Model response blocked: ${candidate.finishReason}`);
+        if (page.imageDataUrl.startsWith("data:")) {
+          const [header, data] = page.imageDataUrl.split(",");
+          base64 = data!;
+          mimeType = header!.match(/data:(.*?);/)?.[1] ?? "image/png";
+        } else {
+          const resp = await fetch(page.imageDataUrl);
+          const blob = await resp.blob();
+          mimeType = blob.type || "image/png";
+          base64 = await blobToBase64(blob);
         }
 
-        for (const part of candidate?.content?.parts ?? []) {
-          if (part.thought && part.text) {
-            fullThinking += part.text;
-            setThinkingText(fullThinking);
-            if (!openedThinking) {
-              openedThinking = true;
-              setThinkingOpen(true);
+        const prompt = promptTemplate.replace(/\{\{object\}\}/g, object.trim());
+        const sdkLevel = SDK_THINKING_LEVEL_MAP[thinkingLevel];
+        const thinkingConfig =
+          thinkingLevel === "none" || !sdkLevel
+            ? undefined
+            : { thinkingLevel: sdkLevel, includeThoughts: true };
+
+        const stream = await ai.models.generateContentStream({
+          model,
+          config: {
+            temperature,
+            ...(thinkingConfig ? { thinkingConfig } : {}),
+          },
+          contents: [
+            {
+              role: "user",
+              parts: [
+                { text: prompt },
+                { inlineData: { data: base64, mimeType } },
+              ],
+            },
+          ],
+        });
+
+        let fullText = "";
+        let fullThinking = "";
+        let openedThinking = false;
+
+        for await (const chunk of stream) {
+          const candidate = chunk.candidates?.[0];
+          if (
+            candidate?.finishReason &&
+            candidate.finishReason !== FinishReason.STOP &&
+            candidate.finishReason !== FinishReason.MAX_TOKENS
+          ) {
+            throw new Error(`Model response blocked: ${candidate.finishReason}`);
+          }
+
+          for (const part of candidate?.content?.parts ?? []) {
+            if (part.thought && part.text) {
+              fullThinking += part.text;
+              setThinkingText(fullThinking);
+              if (!openedThinking) {
+                openedThinking = true;
+                setThinkingOpen(true);
+              }
+            } else if (part.text) {
+              fullText += part.text;
             }
-          } else if (part.text) {
-            fullText += part.text;
+          }
+
+          if (chunk.usageMetadata) {
+            setUsageMetadata({
+              promptTokenCount: chunk.usageMetadata.promptTokenCount,
+              candidatesTokenCount: chunk.usageMetadata.candidatesTokenCount,
+              thoughtsTokenCount: chunk.usageMetadata.thoughtsTokenCount,
+              totalTokenCount: chunk.usageMetadata.totalTokenCount,
+            });
           }
         }
 
-        if (chunk.usageMetadata) {
-          setUsageMetadata({
-            promptTokenCount: chunk.usageMetadata.promptTokenCount,
-            candidatesTokenCount: chunk.usageMetadata.candidatesTokenCount,
-            thoughtsTokenCount: chunk.usageMetadata.thoughtsTokenCount,
-            totalTokenCount: chunk.usageMetadata.totalTokenCount,
-          });
+        const jsonMatch = fullText.match(/\[\s*\{[\s\S]*?\}\s*\]/);
+        if (!jsonMatch) {
+          throw new Error("No bounding boxes found in model response");
         }
-      }
 
-      const jsonMatch = fullText.match(/\[\s*\{[\s\S]*?\}\s*\]/);
-      if (!jsonMatch) {
-        throw new Error("No bounding boxes found in model response");
+        const parsed = JSON.parse(jsonMatch[0]);
+        const detectedBoxes = BoxesSchema.parse(parsed);
+        setPages((prev) => {
+          const updated = [...prev];
+          updated[0] = { ...updated[0]!, boxes: detectedBoxes };
+          return updated;
+        });
+      } catch (err: unknown) {
+        setThinkingText("");
+        setThinkingOpen(false);
+        setUsageMetadata(null);
+        setError(err instanceof Error ? err.message : "Something went wrong");
+      } finally {
+        setLoading(false);
       }
+    } else {
+      // Multi-page: parallel detection with progress
+      try {
+        const promises = pages.map(async (page, idx) => {
+          try {
+            const result = await detectSinglePage(page.imageDataUrl, object, ai);
+            setPages((prev) => {
+              const updated = [...prev];
+              updated[idx] = { ...updated[idx]!, boxes: result.boxes };
+              return updated;
+            });
+            setPagesCompleted((prev) => prev + 1);
+            return { idx, result };
+          } catch (err) {
+            const errorMsg = err instanceof Error ? err.message : "Detection failed";
+            setPages((prev) => {
+              const updated = [...prev];
+              updated[idx] = { ...updated[idx]!, error: errorMsg };
+              return updated;
+            });
+            setPagesCompleted((prev) => prev + 1);
+            return { idx, error: errorMsg };
+          }
+        });
 
-      const parsed = JSON.parse(jsonMatch[0]);
-      const detectedBoxes = BoxesSchema.parse(parsed);
-      setBoxes(detectedBoxes);
-    } catch (err: unknown) {
-      setThinkingText("");
-      setThinkingOpen(false);
-      setUsageMetadata(null);
-      setError(err instanceof Error ? err.message : "Something went wrong");
-    } finally {
-      setLoading(false);
+        await Promise.allSettled(promises);
+      } catch (err: unknown) {
+        setError(err instanceof Error ? err.message : "Something went wrong");
+      } finally {
+        setLoading(false);
+      }
     }
   };
+
+  const currentPage = pages[currentPageIndex] as PageResult | undefined;
+  const boxes = useMemo(() => currentPage?.boxes ?? [], [currentPage?.boxes]);
+  const imageUrl = currentPage?.imageDataUrl ?? null;
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
@@ -360,7 +702,7 @@ export default function App() {
         (labelY > 0 ? labelY : y) + LABEL_PAD_Y + 13,
       );
     }
-  }, [boxes, selectedIndex]);
+  }, [boxes, selectedIndex, imageUrl]);
 
   useEffect(() => {
     draw();
@@ -438,8 +780,9 @@ export default function App() {
   }
 
   // ── Main App ────────────────────────────────────────────────────
-  const hasImage = !!imageUrl;
+  const hasImage = pages.length > 0;
   const hasBoxes = boxes.length > 0;
+  const isMultiPage = pages.length > 1;
   const allObjectsForDetect = [...objects, ...(objectInput.trim() ? [objectInput.trim()] : [])];
   const canDetect = hasImage && allObjectsForDetect.length > 0 && apiKey.trim() && !loading;
 
@@ -494,15 +837,15 @@ export default function App() {
                 <Upload className="size-7" />
               </div>
               <p className="text-base font-medium">
-                Drop an image here, or click to browse
+                Drop an image or PDF here, or click to browse
               </p>
               <p className="mt-1.5 text-sm text-muted-foreground">
-                PNG, JPG, WebP, or GIF
+                PNG, JPG, WebP, GIF, or PDF
               </p>
               <input
                 ref={fileInputRef}
                 type="file"
-                accept="image/*"
+                accept="image/*,.pdf"
                 className="hidden"
                 onChange={(e) => {
                   const file = e.target.files?.[0];
@@ -579,9 +922,9 @@ export default function App() {
                   variant="outline"
                   size="icon-lg"
                   onClick={() => {
-                    setImageUrl(null);
+                    setPages([]);
+                    setCurrentPageIndex(0);
                     setImageFile(null);
-                    setBoxes([]);
                     setObjects([]);
                     setObjectInput("");
                     setError(null);
@@ -589,6 +932,7 @@ export default function App() {
                     setThinkingText("");
                     setThinkingOpen(false);
                     setUsageMetadata(null);
+                    setPagesCompleted(0);
                   }}
                   title="Clear image and prompt"
                 >
@@ -710,7 +1054,9 @@ export default function App() {
                             <>
                               <div className="size-3 rounded-full border-[1.5px] border-primary border-t-transparent animate-spin" />
                               <span className="font-medium text-foreground">
-                                Detecting {allObjectsForDetect.join(", ")}...
+                                {isMultiPage
+                                  ? `${pagesCompleted} of ${pages.length} pages complete`
+                                  : `Detecting ${allObjectsForDetect.join(", ")}...`}
                               </span>
                             </>
                           ) : (
@@ -760,63 +1106,29 @@ export default function App() {
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
                 {/* Results Sidebar — shown above image on mobile */}
                 <div className="w-full sm:hidden">
-                  <div className="space-y-1.5">
-                    <div className="flex items-center justify-between px-1">
-                      <span className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground">Detected</span>
-                      {hasBoxes && (
-                        <span className="rounded-full bg-primary/10 px-1.5 py-px font-mono text-[10px] font-semibold text-primary tabular-nums">
-                          {boxes.length}
-                        </span>
-                      )}
-                    </div>
-                    {hasBoxes ? (
-                      <ul className="flex flex-wrap gap-1">
-                        {boxes.map((box, i) => {
-                          const isSelected = selectedIndex === i;
-                          return (
-                            <li key={i} className="animate-fade-in-up" style={{ animationDelay: `${i * 40}ms` }}>
-                              <button
-                                className={`inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs transition-colors ${
-                                  isSelected
-                                    ? "bg-secondary text-secondary-foreground"
-                                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                                }`}
-                                onClick={() =>
-                                  setSelectedIndex(isSelected ? null : i)
-                                }
-                              >
-                                <span
-                                  className="size-2 shrink-0 rounded-full"
-                                  style={{
-                                    backgroundColor: isSelected
-                                      ? HIGHLIGHT_COLOR
-                                      : BOX_COLOR,
-                                  }}
-                                />
-                                <span className="truncate">{box.label}</span>
-                              </button>
-                            </li>
-                          );
-                        })}
-                      </ul>
-                    ) : (
-                      <p className="px-1 text-xs text-muted-foreground/50">
-                        No detections yet
-                      </p>
-                    )}
-                  </div>
+                  <ResultsSidebar
+                    pages={pages}
+                    currentPageIndex={currentPageIndex}
+                    selectedIndex={selectedIndex}
+                    onSelectBox={(pageIdx, boxIdx) => {
+                      setCurrentPageIndex(pageIdx);
+                      setSelectedIndex(boxIdx);
+                    }}
+                    variant="mobile"
+                  />
                 </div>
 
                 {/* Canvas Area */}
                 <div className="relative min-w-0 flex-1">
                   <img
                     ref={imgRef}
-                    src={imageUrl}
+                    src={imageUrl ?? undefined}
                     alt=""
                     className="hidden"
                     onLoad={onImageLoad}
                   />
                   <TransformWrapper
+                    key={currentPageIndex}
                     initialScale={1}
                     minScale={0.25}
                     maxScale={10}
@@ -846,51 +1158,18 @@ export default function App() {
                 </div>
 
                 {/* Results Sidebar — desktop only (mobile version is above) */}
-                <div className="hidden sm:block w-44 shrink-0">
-                  <div className="sticky top-20 space-y-1.5">
-                    <div className="flex items-center justify-between px-1">
-                      <span className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground">Detected</span>
-                      {hasBoxes && (
-                        <span className="rounded-full bg-primary/10 px-1.5 py-px font-mono text-[10px] font-semibold text-primary tabular-nums">
-                          {boxes.length}
-                        </span>
-                      )}
-                    </div>
-                    {hasBoxes ? (
-                      <ul className="space-y-px">
-                        {boxes.map((box, i) => {
-                          const isSelected = selectedIndex === i;
-                          return (
-                            <li key={i} className="animate-fade-in-up" style={{ animationDelay: `${i * 40}ms` }}>
-                              <button
-                                className={`flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition-colors ${
-                                  isSelected
-                                    ? "bg-secondary text-secondary-foreground"
-                                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                                }`}
-                                onClick={() =>
-                                  setSelectedIndex(isSelected ? null : i)
-                                }
-                              >
-                                <span
-                                  className="size-2 shrink-0 rounded-full"
-                                  style={{
-                                    backgroundColor: isSelected
-                                      ? HIGHLIGHT_COLOR
-                                      : BOX_COLOR,
-                                  }}
-                                />
-                                <span className="truncate">{box.label}</span>
-                              </button>
-                            </li>
-                          );
-                        })}
-                      </ul>
-                    ) : (
-                      <p className="px-1 text-xs text-muted-foreground/50">
-                        No detections yet
-                      </p>
-                    )}
+                <div className="hidden sm:block w-52 shrink-0">
+                  <div className="sticky top-20">
+                    <ResultsSidebar
+                      pages={pages}
+                      currentPageIndex={currentPageIndex}
+                      selectedIndex={selectedIndex}
+                      onSelectBox={(pageIdx, boxIdx) => {
+                        setCurrentPageIndex(pageIdx);
+                        setSelectedIndex(boxIdx);
+                      }}
+                      variant="desktop"
+                    />
                   </div>
                 </div>
             </div>
