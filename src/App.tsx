@@ -241,7 +241,7 @@ export default function App() {
           }
         }
 
-        // Capture usage metadata from the final chunk
+        // Capture usage metadata (last value wins)
         if (chunk.usageMetadata) {
           setUsageMetadata({
             promptTokenCount: chunk.usageMetadata.promptTokenCount,
