@@ -10,7 +10,7 @@ if (!OBJECT) {
   console.error("Usage: bun index.ts <object to detect>");
   process.exit(1);
 }
-const PROMPT = `Detect all ${OBJECT} in the image.`
+const PROMPT = `Detect all ${OBJECT} in the image. Use descriptive, human-readable labels for each detected item (e.g. "Master bedroom" instead of "bedrooms"). Return ONLY a JSON array with this exact shape: [{"box_2d": [y_min, x_min, y_max, x_max], "label": "descriptive label"}] where coordinates are 0-1000 normalized. No other text.`
 const MODEL = "gemma-4-26b-a4b-it";
 
 console.log(`Running prompt "${PROMPT}" with model "${MODEL}"...`);

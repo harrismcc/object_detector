@@ -37,7 +37,8 @@ import { ChevronDown } from "lucide-react";
 
 const DEFAULT_MODEL = "gemma-4-26b-a4b-it";
 const API_KEY_STORAGE = "gemini-api-key";
-const DEFAULT_PROMPT_TEMPLATE = "Detect all {{object}} in the image.";
+const DEFAULT_PROMPT_TEMPLATE =
+  'Detect all {{object}} in the image. Use descriptive, human-readable labels for each detected item (e.g. "Master bedroom" instead of "bedrooms"). Return ONLY a JSON array with this exact shape: [{"box_2d": [y_min, x_min, y_max, x_max], "label": "descriptive label"}] where coordinates are 0-1000 normalized. No other text.';
 
 const AVAILABLE_MODELS = [
   "gemini-3-flash-preview",
@@ -96,7 +97,8 @@ export default function App() {
   );
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [imageFile, setImageFile] = useState<File | null>(null);
-  const [object, setObject] = useState("");
+  const [objects, setObjects] = useState<string[]>([]);
+  const [objectInput, setObjectInput] = useState("");
   const [boxes, setBoxes] = useState<Box[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -146,7 +148,10 @@ export default function App() {
   );
 
   const handleDetect = async () => {
-    if (!imageFile || !object.trim() || !apiKey.trim()) return;
+    const allObjects = [...objects];
+    if (objectInput.trim()) allObjects.push(objectInput.trim());
+    if (!imageFile || allObjects.length === 0 || !apiKey.trim()) return;
+    const object = allObjects.join(", ");
     setLoading(true);
     setError(null);
     setBoxes([]);
@@ -355,18 +360,54 @@ export default function App() {
       ) : (
         <div className="space-y-4">
           <div className="flex gap-3">
-            <Input
-              value={object}
-              onChange={(e) => setObject(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") handleDetect();
-              }}
-              placeholder="What do you want to detect? (e.g. cars, faces, dogs)"
-              className="flex-1"
-            />
+            <div className="flex-1 flex flex-wrap items-center gap-1.5 rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-xs focus-within:ring-1 focus-within:ring-ring">
+              {objects.map((obj, i) => (
+                <span
+                  key={i}
+                  className="inline-flex items-center gap-1 rounded-md bg-secondary px-2 py-0.5 text-sm text-secondary-foreground"
+                >
+                  {obj}
+                  <button
+                    type="button"
+                    className="ml-0.5 rounded-sm hover:bg-muted-foreground/20 p-0.5 leading-none"
+                    onClick={() => setObjects(objects.filter((_, j) => j !== i))}
+                  >
+                    &times;
+                  </button>
+                </span>
+              ))}
+              <input
+                value={objectInput}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val.includes(",")) {
+                    const parts = val.split(",");
+                    const newTags = parts.slice(0, -1).map((s) => s.trim()).filter(Boolean);
+                    setObjects([...objects, ...newTags]);
+                    setObjectInput(parts[parts.length - 1]!);
+                  } else {
+                    setObjectInput(val);
+                  }
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    if (objectInput.trim()) {
+                      setObjects([...objects, objectInput.trim()]);
+                      setObjectInput("");
+                    } else {
+                      handleDetect();
+                    }
+                  } else if (e.key === "Backspace" && !objectInput && objects.length > 0) {
+                    setObjects(objects.slice(0, -1));
+                  }
+                }}
+                placeholder={objects.length === 0 ? "What do you want to detect? (e.g. cars, faces, dogs)" : "Add more..."}
+                className="flex-1 min-w-[120px] bg-transparent outline-none placeholder:text-muted-foreground"
+              />
+            </div>
             <Button
               onClick={handleDetect}
-              disabled={loading || !object.trim() || !apiKey.trim()}
+              disabled={loading || (objects.length === 0 && !objectInput.trim()) || !apiKey.trim()}
               size="lg"
             >
               {loading ? "Detecting..." : "Detect"}
@@ -378,7 +419,8 @@ export default function App() {
                 setImageUrl(null);
                 setImageFile(null);
                 setBoxes([]);
-                setObject("");
+                setObjects([]);
+                setObjectInput("");
                 setError(null);
                 setSelectedIndex(null);
               }}
@@ -490,7 +532,7 @@ export default function App() {
                 <div className="absolute inset-0 bg-black/50 rounded-lg flex items-center justify-center">
                   <Card className="flex-row items-center gap-3 px-5 py-3">
                     <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                    <span>Detecting {object}...</span>
+                    <span>Detecting {[...objects, objectInput.trim()].filter(Boolean).join(", ")}...</span>
                   </Card>
                 </div>
               )}
