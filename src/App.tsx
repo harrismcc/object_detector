@@ -441,9 +441,20 @@ export default function App() {
             <ScanSearch className="size-5 text-primary" />
             <span className="text-sm font-semibold tracking-tight">Object Detector</span>
           </div>
-          <Button variant="ghost" size="sm" onClick={clearApiKey}>
-            Change API Key
-          </Button>
+          <div className="flex items-center gap-1">
+            <a
+              href="https://github.com/harrismcc/object_detector"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center justify-center size-8 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+              title="View on GitHub"
+            >
+              <svg className="size-4" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+            </a>
+            <Button variant="ghost" size="sm" onClick={clearApiKey}>
+              Change API Key
+            </Button>
+          </div>
         </div>
       </header>
 
@@ -493,9 +504,9 @@ export default function App() {
           /* ── Detection Interface ── */
           <>
             {/* ── Controls Bar ── */}
-            <div className="flex items-center gap-2 animate-fade-in">
+            <div className="flex flex-col gap-2 animate-fade-in sm:flex-row sm:items-center">
               {/* Tag Input */}
-              <div className="flex min-h-[36px] flex-1 flex-wrap items-center gap-1.5 rounded-lg border border-input bg-card px-3 py-1.5 text-sm shadow-xs ring-ring/50 transition-shadow focus-within:ring-2">
+              <div className="flex min-h-[44px] sm:min-h-[36px] flex-1 flex-wrap items-center gap-1.5 rounded-lg border border-input bg-card px-3 py-1.5 text-sm shadow-xs ring-ring/50 transition-shadow focus-within:ring-2">
                 <Crosshair className="size-3.5 shrink-0 text-muted-foreground" />
                 {objects.map((obj, i) => (
                   <span
@@ -542,35 +553,37 @@ export default function App() {
                 />
               </div>
 
-              <Button
-                onClick={handleDetect}
-                disabled={!canDetect}
-                size="lg"
-                className="gap-2 shrink-0"
-              >
-                <ScanSearch className="size-4" />
-                {loading ? "Detecting..." : "Detect"}
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  onClick={handleDetect}
+                  disabled={!canDetect}
+                  size="lg"
+                  className="gap-2 flex-1 sm:flex-none shrink-0"
+                >
+                  <ScanSearch className="size-4" />
+                  {loading ? "Detecting..." : "Detect"}
+                </Button>
 
-              <Button
-                variant="outline"
-                size="icon-lg"
-                onClick={() => {
-                  setImageUrl(null);
-                  setImageFile(null);
-                  setBoxes([]);
-                  setObjects([]);
-                  setObjectInput("");
-                  setError(null);
-                  setSelectedIndex(null);
-                  setThinkingText("");
-                  setThinkingOpen(false);
-                  setUsageMetadata(null);
-                }}
-                title="Clear image and prompt"
-              >
-                <X className="size-4" />
-              </Button>
+                <Button
+                  variant="outline"
+                  size="icon-lg"
+                  onClick={() => {
+                    setImageUrl(null);
+                    setImageFile(null);
+                    setBoxes([]);
+                    setObjects([]);
+                    setObjectInput("");
+                    setError(null);
+                    setSelectedIndex(null);
+                    setThinkingText("");
+                    setThinkingOpen(false);
+                    setUsageMetadata(null);
+                  }}
+                  title="Clear image and prompt"
+                >
+                  <X className="size-4" />
+                </Button>
+              </div>
             </div>
 
             {/* ── Advanced Settings ── */}
@@ -586,8 +599,8 @@ export default function App() {
               </CollapsibleTrigger>
               <CollapsibleContent>
                 <Card className="mt-2" size="sm">
-                  <CardContent className="grid grid-cols-3 gap-4">
-                    <div className="col-span-3 space-y-1.5">
+                  <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                    <div className="sm:col-span-3 space-y-1.5">
                       <Label htmlFor="prompt-template" className="text-xs">
                         Prompt Template{" "}
                         <span className="text-muted-foreground font-normal">
@@ -733,10 +746,58 @@ export default function App() {
             )}
 
             {/* ── Canvas + Sidebar ── */}
-            <div className="flex justify-center">
-              <div className="inline-flex items-start gap-3 max-w-full">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
+                {/* Results Sidebar — shown above image on mobile */}
+                <div className="w-full sm:hidden">
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between px-1">
+                      <span className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground">Detected</span>
+                      {hasBoxes && (
+                        <span className="rounded-full bg-primary/10 px-1.5 py-px font-mono text-[10px] font-semibold text-primary tabular-nums">
+                          {boxes.length}
+                        </span>
+                      )}
+                    </div>
+                    {hasBoxes ? (
+                      <ul className="flex flex-wrap gap-1">
+                        {boxes.map((box, i) => {
+                          const isSelected = selectedIndex === i;
+                          return (
+                            <li key={i} className="animate-fade-in-up" style={{ animationDelay: `${i * 40}ms` }}>
+                              <button
+                                className={`inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs transition-colors ${
+                                  isSelected
+                                    ? "bg-secondary text-secondary-foreground"
+                                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                                }`}
+                                onClick={() =>
+                                  setSelectedIndex(isSelected ? null : i)
+                                }
+                              >
+                                <span
+                                  className="size-2 shrink-0 rounded-full"
+                                  style={{
+                                    backgroundColor: isSelected
+                                      ? HIGHLIGHT_COLOR
+                                      : BOX_COLOR,
+                                  }}
+                                />
+                                <span className="truncate">{box.label}</span>
+                              </button>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    ) : (
+                      <p className="px-1 text-xs text-muted-foreground/50">
+                        No detections yet
+                      </p>
+                    )}
+                  </div>
+                </div>
+
                 {/* Canvas Area */}
-                <div className="relative min-w-0">
+                <div className="relative min-w-0 flex-1">
                   <img
                     ref={imgRef}
                     src={imageUrl}
@@ -753,8 +814,10 @@ export default function App() {
                   >
                     <ZoomControls />
                     <TransformComponent
-                      wrapperClass="!max-w-4xl !w-full rounded-lg"
+                      wrapperClass="!w-full rounded-lg"
+                      wrapperStyle={{ width: "100%" }}
                       contentClass="!w-full"
+                      contentStyle={{ width: "100%" }}
                     >
                       <canvas
                         ref={canvasRef}
@@ -771,8 +834,8 @@ export default function App() {
                   )}
                 </div>
 
-                {/* Results Sidebar — always visible, compact */}
-                <div className="w-44 shrink-0">
+                {/* Results Sidebar — desktop only (mobile version is above) */}
+                <div className="hidden sm:block w-44 shrink-0">
                   <div className="sticky top-20 space-y-1.5">
                     <div className="flex items-center justify-between px-1">
                       <span className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground">Detected</span>
@@ -819,7 +882,6 @@ export default function App() {
                     )}
                   </div>
                 </div>
-              </div>
             </div>
           </>
         )}
