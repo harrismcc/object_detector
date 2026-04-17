@@ -1,0 +1,23 @@
+src/App.tsx
+  c7f6dafc8c4620e0 355-370
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.0",
+  "base_commit_sha": "d144cdd459f5632f7ba37ff6846c997dc9784471",
+  "prompts": {
+    "c7f6dafc8c4620e0": {
+      "agent_id": {
+        "tool": "droid",
+        "id": "07a5e529-e14c-4fcb-9245-6fcf6a750fd7",
+        "model": "custom:CC:-Claude-Opus-4.6-Thinking-Medium-0"
+      },
+      "human_author": "harrismcc",
+      "messages": [],
+      "total_additions": 16,
+      "total_deletions": 0,
+      "accepted_lines": 16,
+      "overriden_lines": 0
+    }
+  }
+}
