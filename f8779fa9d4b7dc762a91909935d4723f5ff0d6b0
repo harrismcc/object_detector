@@ -1,0 +1,37 @@
+src/App.tsx
+  e2c636aebce93cc1 297,310-317
+  b2836f977d715226 99,115-120,529,531-544,546-571,574-633,635-637,1050-1052
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.0",
+  "base_commit_sha": "f8779fa9d4b7dc762a91909935d4723f5ff0d6b0",
+  "prompts": {
+    "b2836f977d715226": {
+      "agent_id": {
+        "tool": "droid",
+        "id": "ae4edde3-df56-43e0-819c-06d88a4a27ed",
+        "model": "custom:CC:-Claude-Opus-4.6-Thinking-Medium-0"
+      },
+      "human_author": "harrismcc",
+      "messages": [],
+      "total_additions": 115,
+      "total_deletions": 110,
+      "accepted_lines": 115,
+      "overriden_lines": 0
+    },
+    "e2c636aebce93cc1": {
+      "agent_id": {
+        "tool": "droid",
+        "id": "9e1f03a6-1cca-4b8b-887f-a3e149e606e4",
+        "model": "custom:CC:-Claude-Opus-4.6-Thinking-Medium-0"
+      },
+      "human_author": "harrismcc",
+      "messages": [],
+      "total_additions": 10,
+      "total_deletions": 21,
+      "accepted_lines": 9,
+      "overriden_lines": 0
+    }
+  }
+}
