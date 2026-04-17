@@ -402,6 +402,17 @@ export default function App() {
                   }}
                   placeholder="AIza..."
                 />
+                <p className="text-xs text-muted-foreground">
+                  Get your key from{" "}
+                  <a
+                    href="https://aistudio.google.com/app/api-keys"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline underline-offset-2 hover:text-foreground transition-colors"
+                  >
+                    Google AI Studio
+                  </a>
+                </p>
               </div>
               <Button
                 onClick={saveApiKey}
