@@ -258,6 +258,9 @@ export default function App() {
       const detectedBoxes = BoxesSchema.parse(parsed);
       setBoxes(detectedBoxes);
     } catch (err: unknown) {
+      setThinkingText("");
+      setThinkingOpen(false);
+      setUsageMetadata(null);
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
       setLoading(false);
