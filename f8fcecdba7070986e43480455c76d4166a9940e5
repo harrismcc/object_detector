@@ -1,0 +1,27 @@
+src/pdf.ts
+  682a67f5ebba58a8 1-41
+src/App.tsx
+  682a67f5ebba58a8 1,6,49,61-62,64,101-107,144,152,156-324,333-334,344,374,377-400,408-410,415-502,506,510,515,517-518,520-525,527-536,538-549,551-564,566-585,587-595,599-601,604-617,619-642,644-649,653-656,705,783,785,840,843,848,925-926,935,1057-1059,1109-1118,1125,1131,1161-1172
+package.json
+  682a67f5ebba58a8 20
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.0",
+  "base_commit_sha": "f8fcecdba7070986e43480455c76d4166a9940e5",
+  "prompts": {
+    "682a67f5ebba58a8": {
+      "agent_id": {
+        "tool": "droid",
+        "id": "e7dc5fd0-badb-40ea-a7ac-d4061e20cd68",
+        "model": "custom:CC:-Claude-Opus-4.6-Thinking-Medium-0"
+      },
+      "human_author": "harrismcc",
+      "messages": [],
+      "total_additions": 541,
+      "total_deletions": 220,
+      "accepted_lines": 511,
+      "overriden_lines": 0
+    }
+  }
+}
