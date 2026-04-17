@@ -559,7 +559,7 @@ export default function App() {
                       max={2}
                       step={0.05}
                       value={[temperature]}
-                      onValueChange={(v) => setTemperature(Array.isArray(v) ? v[0]! : v)}
+                      onValueChange={(v) => { const val = Array.isArray(v) ? v[0] : v; if (val != null) setTemperature(val); }}
                     />
                   </div>
                 </CardContent>
