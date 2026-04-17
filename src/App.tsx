@@ -96,6 +96,7 @@ const SDK_THINKING_LEVEL_MAP: Partial<Record<ThinkingLevel, SDKThinkingLevel>> =
 type Box = {
   box_2d: [number, number, number, number];
   label: string;
+  page?: number;
 };
 
 type PageResult = {
@@ -110,6 +111,13 @@ const BoxSchema = z.object({
   label: z.string(),
 });
 const BoxesSchema = z.array(BoxSchema);
+
+const MultiPageBoxSchema = z.object({
+  box_2d: z.tuple([z.number(), z.number(), z.number(), z.number()]),
+  label: z.string(),
+  page: z.number(),
+});
+const MultiPageBoxesSchema = z.array(MultiPageBoxSchema);
 
 const BOX_COLOR = "#3b82f6";
 const HIGHLIGHT_COLOR = "#facc15";
@@ -280,21 +288,14 @@ function PageGroup({
   selectedIndex: number | null;
   renderBoxList: (boxes: Box[], pageIdx: number, isMobile: boolean) => React.ReactNode;
 }) {
-  const [open, setOpen] = useState(defaultOpen);
-
   return (
     <div className={`rounded-md ${
       isCurrentPage ? "bg-muted/50 ring-1 ring-border" : ""
     }`}>
       <button
         className="flex w-full items-center gap-1.5 px-2 py-1.5 text-left text-xs font-medium transition-colors hover:bg-muted/70"
-        onClick={() => setOpen(!open)}
+        onClick={() => onSelectBox(page.pageIndex, null)}
       >
-        {open ? (
-          <ChevronDown className="size-3 shrink-0 text-muted-foreground" />
-        ) : (
-          <ChevronRight className="size-3 shrink-0 text-muted-foreground" />
-        )}
         <FileText className="size-3 shrink-0 text-muted-foreground" />
         <span>Page {page.pageIndex + 1}</span>
         {page.boxes.length > 0 && (
@@ -306,18 +307,14 @@ function PageGroup({
           <AlertCircle className="ml-auto size-3 text-destructive" />
         )}
       </button>
-      {open && (
-        <div className="px-2 pb-2">
-          {page.error && (
-            <p className="text-xs text-destructive mb-1">{page.error}</p>
-          )}
-          {page.boxes.length > 0 ? (
-            renderBoxList(page.boxes, page.pageIndex, isMobile)
-          ) : !page.error ? (
-            <p className="text-xs text-muted-foreground/50">No detections</p>
-          ) : null}
-        </div>
-      )}
+      <div className="px-2 pb-2">
+        {page.error && (
+          <p className="text-xs text-destructive mb-1">{page.error}</p>
+        )}
+        {page.boxes.length > 0 ? (
+          renderBoxList(page.boxes, page.pageIndex, isMobile)
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -411,94 +408,6 @@ export default function App() {
     },
     [handleFile],
   );
-
-  const detectSinglePage = async (
-    imageDataUrl: string,
-    object: string,
-    ai: GoogleGenAI,
-  ): Promise<{ boxes: Box[]; thinkingText: string; usageMetadata: typeof usageMetadata }> => {
-    // Convert data URL or object URL to base64
-    let base64: string;
-    let mimeType: string;
-
-    if (imageDataUrl.startsWith("data:")) {
-      const [header, data] = imageDataUrl.split(",");
-      base64 = data!;
-      mimeType = header!.match(/data:(.*?);/)?.[1] ?? "image/png";
-    } else {
-      // Object URL — need to fetch and convert
-      const resp = await fetch(imageDataUrl);
-      const blob = await resp.blob();
-      mimeType = blob.type || "image/png";
-      base64 = await blobToBase64(blob);
-    }
-
-    const prompt = promptTemplate.replace(/\{\{object\}\}/g, object.trim());
-
-    const sdkLevel = SDK_THINKING_LEVEL_MAP[thinkingLevel];
-    const thinkingConfig =
-      thinkingLevel === "none" || !sdkLevel
-        ? undefined
-        : { thinkingLevel: sdkLevel, includeThoughts: true };
-
-    const stream = await ai.models.generateContentStream({
-      model,
-      config: {
-        temperature,
-        ...(thinkingConfig ? { thinkingConfig } : {}),
-      },
-      contents: [
-        {
-          role: "user",
-          parts: [
-            { text: prompt },
-            { inlineData: { data: base64, mimeType } },
-          ],
-        },
-      ],
-    });
-
-    let fullText = "";
-    let fullThinking = "";
-    let lastUsage: typeof usageMetadata = null;
-
-    for await (const chunk of stream) {
-      const candidate = chunk.candidates?.[0];
-      if (
-        candidate?.finishReason &&
-        candidate.finishReason !== FinishReason.STOP &&
-        candidate.finishReason !== FinishReason.MAX_TOKENS
-      ) {
-        throw new Error(`Model response blocked: ${candidate.finishReason}`);
-      }
-
-      for (const part of candidate?.content?.parts ?? []) {
-        if (part.thought && part.text) {
-          fullThinking += part.text;
-        } else if (part.text) {
-          fullText += part.text;
-        }
-      }
-
-      if (chunk.usageMetadata) {
-        lastUsage = {
-          promptTokenCount: chunk.usageMetadata.promptTokenCount,
-          candidatesTokenCount: chunk.usageMetadata.candidatesTokenCount,
-          thoughtsTokenCount: chunk.usageMetadata.thoughtsTokenCount,
-          totalTokenCount: chunk.usageMetadata.totalTokenCount,
-        };
-      }
-    }
-
-    const jsonMatch = fullText.match(/\[\s*\{[\s\S]*?\}\s*\]/);
-    if (!jsonMatch) {
-      throw new Error("No bounding boxes found in model response");
-    }
-
-    const parsed = JSON.parse(jsonMatch[0]);
-    const detectedBoxes = BoxesSchema.parse(parsed);
-    return { boxes: detectedBoxes, thinkingText: fullThinking, usageMetadata: lastUsage };
-  };
 
   const handleDetect = async () => {
     const allObjects = [...objects];
@@ -617,32 +526,115 @@ export default function App() {
         setLoading(false);
       }
     } else {
-      // Multi-page: parallel detection with progress
+      // Multi-page: single request with all page images
       try {
-        const promises = pages.map(async (page, idx) => {
-          try {
-            const result = await detectSinglePage(page.imageDataUrl, object, ai);
-            setPages((prev) => {
-              const updated = [...prev];
-              updated[idx] = { ...updated[idx]!, boxes: result.boxes };
-              return updated;
-            });
-            setPagesCompleted((prev) => prev + 1);
-            return { idx, result };
-          } catch (err) {
-            const errorMsg = err instanceof Error ? err.message : "Detection failed";
-            setPages((prev) => {
-              const updated = [...prev];
-              updated[idx] = { ...updated[idx]!, error: errorMsg };
-              return updated;
-            });
-            setPagesCompleted((prev) => prev + 1);
-            return { idx, error: errorMsg };
+        // Build image parts for all pages
+        const imageParts: { inlineData: { data: string; mimeType: string } }[] = [];
+        for (const page of pages) {
+          let base64: string;
+          let mimeType: string;
+          if (page.imageDataUrl.startsWith("data:")) {
+            const [header, data] = page.imageDataUrl.split(",");
+            base64 = data!;
+            mimeType = header!.match(/data:(.*?);/)?.[1] ?? "image/png";
+          } else {
+            const resp = await fetch(page.imageDataUrl);
+            const blob = await resp.blob();
+            mimeType = blob.type || "image/png";
+            base64 = await blobToBase64(blob);
           }
+          imageParts.push({ inlineData: { data: base64, mimeType } });
+        }
+
+        const multiPagePrompt = `You are given ${pages.length} images, one per page of a document (page 1, page 2, etc.). Detect all ${object.trim()} across ALL pages. Return ONLY a JSON array with this exact shape: [{"box_2d": [y_min, x_min, y_max, x_max], "label": "descriptive label", "page": 1}] where coordinates are 0-1000 normalized and "page" is the 1-based page number the object appears on. Use descriptive, human-readable labels. No other text.`;
+
+        const sdkLevel = SDK_THINKING_LEVEL_MAP[thinkingLevel];
+        const thinkingConfig =
+          thinkingLevel === "none" || !sdkLevel
+            ? undefined
+            : { thinkingLevel: sdkLevel, includeThoughts: true };
+
+        const stream = await ai.models.generateContentStream({
+          model,
+          config: {
+            temperature,
+            ...(thinkingConfig ? { thinkingConfig } : {}),
+          },
+          contents: [
+            {
+              role: "user",
+              parts: [
+                { text: multiPagePrompt },
+                ...imageParts,
+              ],
+            },
+          ],
         });
 
-        await Promise.allSettled(promises);
+        let fullText = "";
+        let fullThinking = "";
+        let openedThinking = false;
+
+        for await (const chunk of stream) {
+          const candidate = chunk.candidates?.[0];
+          if (
+            candidate?.finishReason &&
+            candidate.finishReason !== FinishReason.STOP &&
+            candidate.finishReason !== FinishReason.MAX_TOKENS
+          ) {
+            throw new Error(`Model response blocked: ${candidate.finishReason}`);
+          }
+
+          for (const part of candidate?.content?.parts ?? []) {
+            if (part.thought && part.text) {
+              fullThinking += part.text;
+              setThinkingText(fullThinking);
+              if (!openedThinking) {
+                openedThinking = true;
+                setThinkingOpen(true);
+              }
+            } else if (part.text) {
+              fullText += part.text;
+            }
+          }
+
+          if (chunk.usageMetadata) {
+            setUsageMetadata({
+              promptTokenCount: chunk.usageMetadata.promptTokenCount,
+              candidatesTokenCount: chunk.usageMetadata.candidatesTokenCount,
+              thoughtsTokenCount: chunk.usageMetadata.thoughtsTokenCount,
+              totalTokenCount: chunk.usageMetadata.totalTokenCount,
+            });
+          }
+        }
+
+        const jsonMatch = fullText.match(/\[\s*\{[\s\S]*?\}\s*\]/);
+        if (!jsonMatch) {
+          throw new Error("No bounding boxes found in model response");
+        }
+
+        const parsed = JSON.parse(jsonMatch[0]);
+        const detectedBoxes = MultiPageBoxesSchema.parse(parsed);
+
+        // Distribute boxes to their respective pages
+        setPages((prev) => {
+          const updated = prev.map((p) => ({ ...p, boxes: [] as Box[] }));
+          for (const box of detectedBoxes) {
+            const pageIdx = box.page - 1; // 1-based to 0-based
+            if (pageIdx >= 0 && pageIdx < updated.length) {
+              updated[pageIdx]!.boxes.push({
+                box_2d: box.box_2d,
+                label: box.label,
+              });
+            }
+          }
+          return updated;
+        });
+        setPagesCompleted(pages.length);
       } catch (err: unknown) {
+        setThinkingText("");
+        setThinkingOpen(false);
+        setUsageMetadata(null);
         setError(err instanceof Error ? err.message : "Something went wrong");
       } finally {
         setLoading(false);
@@ -1055,7 +1047,9 @@ export default function App() {
                               <div className="size-3 rounded-full border-[1.5px] border-primary border-t-transparent animate-spin" />
                               <span className="font-medium text-foreground">
                                 {isMultiPage
-                                  ? `${pagesCompleted} of ${pages.length} pages complete`
+                                  ? pagesCompleted === pages.length
+                                    ? `All ${pages.length} pages complete`
+                                    : `Detecting across ${pages.length} pages...`
                                   : `Detecting ${allObjectsForDetect.join(", ")}...`}
                               </span>
                             </>
