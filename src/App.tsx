@@ -38,7 +38,17 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { ChevronDown, Brain, Coins } from "lucide-react";
+import {
+  ChevronDown,
+  Brain,
+  Upload,
+  ScanSearch,
+  X,
+  Settings2,
+  Crosshair,
+  KeyRound,
+  ShieldCheck,
+} from "lucide-react";
 
 const DEFAULT_MODEL = "gemma-4-26b-a4b-it";
 const API_KEY_STORAGE = "gemini-api-key";
@@ -71,20 +81,13 @@ const BoxSchema = z.object({
 });
 const BoxesSchema = z.array(BoxSchema);
 
-const COLORS = [
-  "#ef4444", "#3b82f6", "#22c55e", "#f59e0b",
-  "#a855f7", "#06b6d4", "#ec4899", "#f97316",
-];
+const BOX_COLOR = "#3b82f6";
 const HIGHLIGHT_COLOR = "#facc15";
 const STROKE_WIDTH = 2;
 const HIGHLIGHT_STROKE = 4;
 const FONT = "bold 13px sans-serif";
 const LABEL_PAD_X = 6;
 const LABEL_PAD_Y = 4;
-
-function colorForIndex(i: number): string {
-  return COLORS[i % COLORS.length]!;
-}
 
 function readFileAsBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -227,7 +230,6 @@ export default function App() {
           throw new Error(`Model response blocked: ${candidate.finishReason}`);
         }
 
-        // Accumulate thinking and text from each chunk
         for (const part of candidate?.content?.parts ?? []) {
           if (part.thought && part.text) {
             fullThinking += part.text;
@@ -241,7 +243,6 @@ export default function App() {
           }
         }
 
-        // Capture usage metadata (last value wins)
         if (chunk.usageMetadata) {
           setUsageMetadata({
             promptTokenCount: chunk.usageMetadata.promptTokenCount,
@@ -294,7 +295,7 @@ export default function App() {
       const bw = ((xMax - xMin) / 1000) * w;
       const bh = ((yMax - yMin) / 1000) * h;
 
-      const color = isSelected ? HIGHLIGHT_COLOR : colorForIndex(i);
+      const color = isSelected ? HIGHLIGHT_COLOR : BOX_COLOR;
       const stroke = isSelected ? HIGHLIGHT_STROKE : STROKE_WIDTH;
 
       ctx.strokeStyle = color;
@@ -328,358 +329,439 @@ export default function App() {
     draw();
   }, [draw]);
 
+  // ── API Key Screen ──────────────────────────────────────────────
   if (!ready) {
     return (
-      <main className="max-w-md mx-auto px-4 py-24">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-3xl">Object Detector</CardTitle>
-            <CardDescription>
-              Detect objects in images using the Gemini API. Everything runs 100%
-              in your browser — your images and API key are never sent to any
-              server other than Google's Gemini API directly.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="api-key">Gemini API Key</Label>
-              <Input
-                id="api-key"
-                type="password"
-                value={apiKeyInput}
-                onChange={(e) => setApiKeyInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") saveApiKey();
-                }}
-                placeholder="AIza..."
-              />
+      <div className="flex min-h-screen items-center justify-center px-4">
+        <div className="w-full max-w-sm animate-fade-in-up">
+          <div className="mb-8 text-center">
+            <div className="mx-auto mb-4 flex size-14 items-center justify-center rounded-2xl bg-primary/10 ring-1 ring-primary/20">
+              <ScanSearch className="size-7 text-primary" />
             </div>
-            <Button
-              onClick={saveApiKey}
-              disabled={!apiKeyInput.trim()}
-              className="w-full"
-              size="lg"
-            >
-              Continue
-            </Button>
-            <p className="text-xs text-muted-foreground">
-              Your key is saved in your browser's local storage so you don't have
-              to enter it again. It is never sent anywhere except directly to
-              Google's API from your browser.
+            <h1 className="text-2xl font-bold tracking-tight">Object Detector</h1>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Detect objects in images using AI vision models
             </p>
-          </CardContent>
-        </Card>
-      </main>
+          </div>
+
+          <Card>
+            <CardContent className="space-y-4 pt-4">
+              <div className="space-y-2">
+                <Label htmlFor="api-key" className="flex items-center gap-2">
+                  <KeyRound className="size-3.5" />
+                  Gemini API Key
+                </Label>
+                <Input
+                  id="api-key"
+                  type="password"
+                  value={apiKeyInput}
+                  onChange={(e) => setApiKeyInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") saveApiKey();
+                  }}
+                  placeholder="AIza..."
+                />
+              </div>
+              <Button
+                onClick={saveApiKey}
+                disabled={!apiKeyInput.trim()}
+                className="w-full"
+                size="lg"
+              >
+                Get Started
+              </Button>
+            </CardContent>
+          </Card>
+
+          <div className="mt-4 flex items-start gap-2 rounded-lg bg-muted/50 px-3 py-2.5 text-xs text-muted-foreground">
+            <ShieldCheck className="mt-0.5 size-3.5 shrink-0" />
+            <span>
+              100% browser-based. Your images and key are only sent directly to
+              Google's Gemini API — never to any other server.
+            </span>
+          </div>
+        </div>
+      </div>
     );
   }
 
+  // ── Main App ────────────────────────────────────────────────────
+  const hasImage = !!imageUrl;
+  const hasBoxes = boxes.length > 0;
+  const allObjectsForDetect = [...objects, ...(objectInput.trim() ? [objectInput.trim()] : [])];
+  const canDetect = hasImage && allObjectsForDetect.length > 0 && apiKey.trim() && !loading;
+
   return (
-    <main className="max-w-6xl mx-auto px-4 py-12">
-      <div className="flex items-center justify-between mb-8">
-        <h1 className="text-3xl font-bold">Object Detector</h1>
-        <Button variant="ghost" size="sm" onClick={clearApiKey}>
-          Change API Key
-        </Button>
-      </div>
-
-      {!imageUrl ? (
-        <Card
-          className="cursor-pointer transition-colors"
-          onDragOver={(e: DragEvent) => {
-            e.preventDefault();
-            setDragOver(true);
-          }}
-          onDragLeave={() => setDragOver(false)}
-          onDrop={handleDrop}
-          onClick={() => fileInputRef.current?.click()}
-        >
-          <CardContent
-            className={`flex items-center justify-center py-16 border-2 border-dashed rounded-xl transition-colors ${
-              dragOver
-                ? "border-primary bg-primary/5"
-                : "border-muted-foreground/25 hover:border-muted-foreground/50"
-            }`}
-          >
-            <p className="text-lg text-muted-foreground">
-              Drop an image here or click to upload
-            </p>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) handleFile(file);
-              }}
-            />
-          </CardContent>
-        </Card>
-      ) : (
-        <div className="space-y-4">
-          <div className="flex gap-3">
-            <div className="flex-1 flex flex-wrap items-center gap-1.5 rounded-md border border-input bg-transparent px-3 py-2 text-base shadow-xs focus-within:ring-1 focus-within:ring-ring">
-              {objects.map((obj, i) => (
-                <span
-                  key={i}
-                  className="inline-flex items-center gap-1 rounded-md bg-secondary px-2 py-0.5 text-sm text-secondary-foreground"
-                >
-                  {obj}
-                  <button
-                    type="button"
-                    className="ml-0.5 rounded-sm hover:bg-muted-foreground/20 p-0.5 leading-none"
-                    onClick={() => setObjects(objects.filter((_, j) => j !== i))}
-                  >
-                    &times;
-                  </button>
-                </span>
-              ))}
-              <input
-                value={objectInput}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  if (val.includes(",")) {
-                    const parts = val.split(",");
-                    const newTags = parts.slice(0, -1).map((s) => s.trim()).filter(Boolean);
-                    setObjects([...objects, ...newTags]);
-                    setObjectInput(parts[parts.length - 1]!);
-                  } else {
-                    setObjectInput(val);
-                  }
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    if (objectInput.trim()) {
-                      setObjects([...objects, objectInput.trim()]);
-                      setObjectInput("");
-                    } else {
-                      handleDetect();
-                    }
-                  } else if (e.key === "Backspace" && !objectInput && objects.length > 0) {
-                    setObjects(objects.slice(0, -1));
-                  }
-                }}
-                placeholder={objects.length === 0 ? "What do you want to detect? (e.g. cars, faces, dogs)" : "Add more..."}
-                className="flex-1 min-w-[120px] bg-transparent outline-none placeholder:text-muted-foreground"
-              />
-            </div>
-            <Button
-              onClick={handleDetect}
-              disabled={loading || (objects.length === 0 && !objectInput.trim()) || !apiKey.trim()}
-              size="lg"
-            >
-              {loading ? "Detecting..." : "Detect"}
-            </Button>
-            <Button
-              variant="outline"
-              size="lg"
-              onClick={() => {
-                setImageUrl(null);
-                setImageFile(null);
-                setBoxes([]);
-                setObjects([]);
-                setObjectInput("");
-                setError(null);
-                setSelectedIndex(null);
-              }}
-            >
-              Clear
-            </Button>
+    <div className="flex min-h-screen flex-col">
+      {/* ── Header ── */}
+      <header className="sticky top-0 z-30 border-b bg-background/80 backdrop-blur-sm">
+        <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-4 sm:px-6">
+          <div className="flex items-center gap-2.5">
+            <ScanSearch className="size-5 text-primary" />
+            <span className="text-sm font-semibold tracking-tight">Object Detector</span>
           </div>
-
-          <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
-            <CollapsibleTrigger
-              render={<Button variant="ghost" size="sm" className="gap-2 text-muted-foreground" />}
-            >
-              <ChevronDown
-                className={`h-4 w-4 transition-transform ${advancedOpen ? "rotate-180" : ""}`}
-              />
-              Advanced Settings
-            </CollapsibleTrigger>
-            <CollapsibleContent>
-              <Card className="mt-2">
-                <CardContent className="grid grid-cols-2 gap-4 pt-4">
-                  <div className="col-span-2 space-y-2">
-                    <Label htmlFor="prompt-template">
-                      Prompt Template{" "}
-                      <span className="text-muted-foreground font-normal">
-                        (use {"{{object}}"} as placeholder)
-                      </span>
-                    </Label>
-                    <Textarea
-                      id="prompt-template"
-                      value={promptTemplate}
-                      onChange={(e) => setPromptTemplate(e.target.value)}
-                      rows={2}
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="model-select">Model</Label>
-                    <Select value={model} onValueChange={(v) => { if (v) setModel(v); }}>
-                      <SelectTrigger id="model-select">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {AVAILABLE_MODELS.map((m) => (
-                          <SelectItem key={m} value={m}>
-                            {m}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="thinking-select">Thinking Level</Label>
-                    <Select
-                      value={thinkingLevel}
-                      onValueChange={(v) => setThinkingLevel(v as ThinkingLevel)}
-                    >
-                      <SelectTrigger id="thinking-select">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {THINKING_LEVELS.map((level) => (
-                          <SelectItem key={level} value={level}>
-                            {level.charAt(0).toUpperCase() + level.slice(1)}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div className="col-span-2 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <Label htmlFor="temperature-slider">Temperature</Label>
-                      <span className="text-sm text-muted-foreground tabular-nums">
-                        {temperature.toFixed(2)}
-                      </span>
-                    </div>
-                    <Slider
-                      id="temperature-slider"
-                      min={0}
-                      max={2}
-                      step={0.05}
-                      value={[temperature]}
-                      onValueChange={(v) => { const val = Array.isArray(v) ? v[0] : v; if (val != null) setTemperature(val); }}
-                    />
-                  </div>
-                </CardContent>
-              </Card>
-            </CollapsibleContent>
-          </Collapsible>
-
-          {error && (
-            <Alert variant="destructive">
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
-
-          {(thinkingText || usageMetadata) && (
-            <div className="space-y-2">
-              {thinkingText && (
-                <Collapsible open={thinkingOpen} onOpenChange={setThinkingOpen}>
-                  <CollapsibleTrigger
-                    render={<Button variant="ghost" size="sm" className="gap-2 text-muted-foreground" />}
-                  >
-                    <Brain className="h-4 w-4" />
-                    <ChevronDown
-                      className={`h-4 w-4 transition-transform ${thinkingOpen ? "rotate-180" : ""}`}
-                    />
-                    Model Thinking
-                    {loading && (
-                      <div className="w-3 h-3 border-2 border-muted-foreground border-t-transparent rounded-full animate-spin" />
-                    )}
-                  </CollapsibleTrigger>
-                  <CollapsibleContent>
-                    <Card className="mt-1">
-                      <CardContent className="pt-4">
-                        <pre className="whitespace-pre-wrap text-sm text-muted-foreground font-mono max-h-64 overflow-y-auto">
-                          {thinkingText}
-                        </pre>
-                      </CardContent>
-                    </Card>
-                  </CollapsibleContent>
-                </Collapsible>
-              )}
-
-              {usageMetadata && !loading && (
-                <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                  <Coins className="h-3.5 w-3.5" />
-                  <span>Prompt: {usageMetadata.promptTokenCount?.toLocaleString() ?? "—"} tokens</span>
-                  <span>Output: {usageMetadata.candidatesTokenCount?.toLocaleString() ?? "—"} tokens</span>
-                  {usageMetadata.thoughtsTokenCount != null && usageMetadata.thoughtsTokenCount > 0 && (
-                    <span>Thinking: {usageMetadata.thoughtsTokenCount.toLocaleString()} tokens</span>
-                  )}
-                  <span className="font-medium text-foreground">
-                    Total: {usageMetadata.totalTokenCount?.toLocaleString() ?? "—"} tokens
-                  </span>
-                </div>
-              )}
-            </div>
-          )}
-
-          <div className="flex gap-6">
-            <div className="relative flex-1 min-w-0">
-              <img
-                ref={imgRef}
-                src={imageUrl}
-                alt=""
-                className="hidden"
-                onLoad={onImageLoad}
-              />
-              <canvas ref={canvasRef} className="max-w-full rounded-lg" />
-              {loading && (
-                <div className="absolute inset-0 bg-background/50 rounded-lg flex items-center justify-center">
-                  <Card className="flex-row items-center gap-3 px-5 py-3">
-                    <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                    <span>Detecting {[...objects, objectInput.trim()].filter(Boolean).join(", ")}...</span>
-                  </Card>
-                </div>
-              )}
-            </div>
-
-            {boxes.length > 0 && (
-              <Card className="w-64 shrink-0 h-fit">
-                <CardHeader>
-                  <CardTitle className="text-sm uppercase tracking-wide text-muted-foreground">
-                    Detected ({boxes.length})
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <ul className="space-y-1">
-                    {boxes.map((box, i) => {
-                      const isSelected = selectedIndex === i;
-                      return (
-                        <li key={i}>
-                          <Button
-                            variant={isSelected ? "secondary" : "ghost"}
-                            className="w-full justify-start gap-3"
-                            onClick={() =>
-                              setSelectedIndex(isSelected ? null : i)
-                            }
-                          >
-                            <span
-                              className="w-3 h-3 rounded-full shrink-0"
-                              style={{
-                                backgroundColor: isSelected
-                                  ? HIGHLIGHT_COLOR
-                                  : colorForIndex(i),
-                              }}
-                            />
-                            <span className="truncate">{box.label}</span>
-                          </Button>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </CardContent>
-              </Card>
-            )}
-          </div>
+          <Button variant="ghost" size="sm" onClick={clearApiKey}>
+            Change API Key
+          </Button>
         </div>
-      )}
-    </main>
+      </header>
+
+      {/* ── Content ── */}
+      <div className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-4 px-4 py-5 sm:px-6">
+        {!hasImage ? (
+          /* ── Upload Zone ── */
+          <div className="flex flex-1 items-center justify-center">
+            <div
+              className={`group w-full max-w-2xl cursor-pointer rounded-2xl border-2 border-dashed p-12 text-center transition-all ${
+                dragOver
+                  ? "border-primary bg-primary/5 scale-[1.01]"
+                  : "border-muted-foreground/20 hover:border-muted-foreground/40 hover:bg-muted/30"
+              }`}
+              onDragOver={(e: DragEvent) => {
+                e.preventDefault();
+                setDragOver(true);
+              }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={handleDrop}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <div className={`mx-auto mb-5 flex size-16 items-center justify-center rounded-2xl transition-colors ${
+                dragOver ? "bg-primary/15 text-primary" : "bg-muted text-muted-foreground group-hover:bg-muted/80"
+              }`}>
+                <Upload className="size-7" />
+              </div>
+              <p className="text-base font-medium">
+                Drop an image here, or click to browse
+              </p>
+              <p className="mt-1.5 text-sm text-muted-foreground">
+                PNG, JPG, WebP, or GIF
+              </p>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) handleFile(file);
+                }}
+              />
+            </div>
+          </div>
+        ) : (
+          /* ── Detection Interface ── */
+          <>
+            {/* ── Controls Bar ── */}
+            <div className="flex items-center gap-2 animate-fade-in">
+              {/* Tag Input */}
+              <div className="flex min-h-[36px] flex-1 flex-wrap items-center gap-1.5 rounded-lg border border-input bg-card px-3 py-1.5 text-sm shadow-xs ring-ring/50 transition-shadow focus-within:ring-2">
+                <Crosshair className="size-3.5 shrink-0 text-muted-foreground" />
+                {objects.map((obj, i) => (
+                  <span
+                    key={i}
+                    className="inline-flex items-center gap-1 rounded-md bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary ring-1 ring-primary/20"
+                  >
+                    {obj}
+                    <button
+                      type="button"
+                      className="ml-0.5 rounded-sm p-0.5 leading-none opacity-60 transition-opacity hover:opacity-100"
+                      onClick={() => setObjects(objects.filter((_, j) => j !== i))}
+                    >
+                      <X className="size-2.5" />
+                    </button>
+                  </span>
+                ))}
+                <input
+                  value={objectInput}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val.includes(",")) {
+                      const parts = val.split(",");
+                      const newTags = parts.slice(0, -1).map((s) => s.trim()).filter(Boolean);
+                      setObjects([...objects, ...newTags]);
+                      setObjectInput(parts[parts.length - 1]!);
+                    } else {
+                      setObjectInput(val);
+                    }
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      if (objectInput.trim()) {
+                        setObjects([...objects, objectInput.trim()]);
+                        setObjectInput("");
+                      } else {
+                        handleDetect();
+                      }
+                    } else if (e.key === "Backspace" && !objectInput && objects.length > 0) {
+                      setObjects(objects.slice(0, -1));
+                    }
+                  }}
+                  placeholder={objects.length === 0 ? "What should I detect? e.g. cars, faces, dogs..." : "Add more..."}
+                  className="min-w-[120px] flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+                />
+              </div>
+
+              <Button
+                onClick={handleDetect}
+                disabled={!canDetect}
+                size="lg"
+                className="gap-2 shrink-0"
+              >
+                <ScanSearch className="size-4" />
+                {loading ? "Detecting..." : "Detect"}
+              </Button>
+
+              <Button
+                variant="outline"
+                size="icon-lg"
+                onClick={() => {
+                  setImageUrl(null);
+                  setImageFile(null);
+                  setBoxes([]);
+                  setObjects([]);
+                  setObjectInput("");
+                  setError(null);
+                  setSelectedIndex(null);
+                  setThinkingText("");
+                  setThinkingOpen(false);
+                  setUsageMetadata(null);
+                }}
+                title="Clear image and prompt"
+              >
+                <X className="size-4" />
+              </Button>
+            </div>
+
+            {/* ── Advanced Settings ── */}
+            <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
+              <CollapsibleTrigger
+                render={<Button variant="ghost" size="xs" className="gap-1.5 text-muted-foreground" />}
+              >
+                <Settings2 className="size-3" />
+                Settings
+                <ChevronDown
+                  className={`size-3 transition-transform ${advancedOpen ? "rotate-180" : ""}`}
+                />
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <Card className="mt-2" size="sm">
+                  <CardContent className="grid grid-cols-3 gap-4">
+                    <div className="col-span-3 space-y-1.5">
+                      <Label htmlFor="prompt-template" className="text-xs">
+                        Prompt Template{" "}
+                        <span className="text-muted-foreground font-normal">
+                          (use {"{{object}}"} as placeholder)
+                        </span>
+                      </Label>
+                      <Textarea
+                        id="prompt-template"
+                        value={promptTemplate}
+                        onChange={(e) => setPromptTemplate(e.target.value)}
+                        rows={2}
+                        className="text-xs"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label htmlFor="model-select" className="text-xs">Model</Label>
+                      <Select value={model} onValueChange={(v) => { if (v) setModel(v); }}>
+                        <SelectTrigger id="model-select">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {AVAILABLE_MODELS.map((m) => (
+                            <SelectItem key={m} value={m}>
+                              {m}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label htmlFor="thinking-select" className="text-xs">Thinking</Label>
+                      <Select
+                        value={thinkingLevel}
+                        onValueChange={(v) => setThinkingLevel(v as ThinkingLevel)}
+                      >
+                        <SelectTrigger id="thinking-select">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {THINKING_LEVELS.map((level) => (
+                            <SelectItem key={level} value={level}>
+                              {level.charAt(0).toUpperCase() + level.slice(1)}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <Label htmlFor="temperature-slider" className="text-xs">Temperature</Label>
+                        <span className="font-mono text-xs text-muted-foreground tabular-nums">
+                          {temperature.toFixed(2)}
+                        </span>
+                      </div>
+                      <Slider
+                        id="temperature-slider"
+                        min={0}
+                        max={2}
+                        step={0.05}
+                        value={[temperature]}
+                        onValueChange={(v) => { const val = Array.isArray(v) ? v[0] : v; if (val != null) setTemperature(val); }}
+                      />
+                    </div>
+                  </CardContent>
+                </Card>
+              </CollapsibleContent>
+            </Collapsible>
+
+            {/* ── Error ── */}
+            {error && (
+              <Alert variant="destructive" className="animate-fade-in">
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
+
+            {/* ── Thinking / Loading Panel (above image) ── */}
+            {(loading || thinkingText) && (
+              <div className="animate-fade-in">
+                <Collapsible open={loading || thinkingOpen} onOpenChange={setThinkingOpen}>
+                  <Card size="sm">
+                    <CardContent>
+                      {/* Header row — always visible */}
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                          {loading ? (
+                            <>
+                              <div className="size-3 rounded-full border-[1.5px] border-primary border-t-transparent animate-spin" />
+                              <span className="font-medium text-foreground">
+                                Detecting {allObjectsForDetect.join(", ")}...
+                              </span>
+                            </>
+                          ) : (
+                            <>
+                              <Brain className="size-3" />
+                              <span>Model Thinking</span>
+                            </>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-3">
+                          {/* Token usage (inline, shown after loading completes) */}
+                          {usageMetadata && !loading && (
+                            <div className="flex items-center gap-3 font-mono text-[11px] text-muted-foreground">
+                              <span>{usageMetadata.promptTokenCount?.toLocaleString() ?? "—"} in</span>
+                              <span>{usageMetadata.candidatesTokenCount?.toLocaleString() ?? "—"} out</span>
+                              {usageMetadata.thoughtsTokenCount != null && usageMetadata.thoughtsTokenCount > 0 && (
+                                <span>{usageMetadata.thoughtsTokenCount.toLocaleString()} thinking</span>
+                              )}
+                            </div>
+                          )}
+                          {thinkingText && !loading && (
+                            <CollapsibleTrigger
+                              render={<Button variant="ghost" size="icon-xs" className="text-muted-foreground" />}
+                            >
+                              <ChevronDown
+                                className={`size-3 transition-transform ${thinkingOpen ? "rotate-180" : ""}`}
+                              />
+                            </CollapsibleTrigger>
+                          )}
+                        </div>
+                      </div>
+                      {/* Streaming thinking text */}
+                      {thinkingText && (
+                        <CollapsibleContent>
+                          <pre className="mt-2 max-h-40 overflow-y-auto whitespace-pre-wrap border-t border-border pt-2 font-mono text-xs leading-relaxed text-muted-foreground">
+                            {thinkingText}
+                          </pre>
+                        </CollapsibleContent>
+                      )}
+                    </CardContent>
+                  </Card>
+                </Collapsible>
+              </div>
+            )}
+
+            {/* ── Canvas + Sidebar ── */}
+            <div className="flex justify-center">
+              <div className="inline-flex items-start gap-3 max-w-full">
+                {/* Canvas Area */}
+                <div className="relative min-w-0">
+                  <img
+                    ref={imgRef}
+                    src={imageUrl}
+                    alt=""
+                    className="hidden"
+                    onLoad={onImageLoad}
+                  />
+                  <canvas
+                    ref={canvasRef}
+                    className="max-w-4xl w-full rounded-lg"
+                  />
+
+                  {/* Loading Overlay (subtle, since status is in the panel above) */}
+                  {loading && (
+                    <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-lg">
+                      <div className="h-0.5 w-full bg-gradient-to-r from-transparent via-primary/40 to-transparent animate-scan" />
+                    </div>
+                  )}
+                </div>
+
+                {/* Results Sidebar — always visible, compact */}
+                <div className="w-44 shrink-0">
+                  <div className="sticky top-20 space-y-1.5">
+                    <div className="flex items-center justify-between px-1">
+                      <span className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground">Detected</span>
+                      {hasBoxes && (
+                        <span className="rounded-full bg-primary/10 px-1.5 py-px font-mono text-[10px] font-semibold text-primary tabular-nums">
+                          {boxes.length}
+                        </span>
+                      )}
+                    </div>
+                    {hasBoxes ? (
+                      <ul className="space-y-px">
+                        {boxes.map((box, i) => {
+                          const isSelected = selectedIndex === i;
+                          return (
+                            <li key={i} className="animate-fade-in-up" style={{ animationDelay: `${i * 40}ms` }}>
+                              <button
+                                className={`flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition-colors ${
+                                  isSelected
+                                    ? "bg-secondary text-secondary-foreground"
+                                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                                }`}
+                                onClick={() =>
+                                  setSelectedIndex(isSelected ? null : i)
+                                }
+                              >
+                                <span
+                                  className="size-2 shrink-0 rounded-full"
+                                  style={{
+                                    backgroundColor: isSelected
+                                      ? HIGHLIGHT_COLOR
+                                      : BOX_COLOR,
+                                  }}
+                                />
+                                <span className="truncate">{box.label}</span>
+                              </button>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    ) : (
+                      <p className="px-1 text-xs text-muted-foreground/50">
+                        No detections yet
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
   );
 }
