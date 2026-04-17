@@ -1,0 +1,23 @@
+package.json
+  a4435ea8b8f08af0 39
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.0",
+  "base_commit_sha": "d74f3d279604659427572491c64767b798546cdb",
+  "prompts": {
+    "a4435ea8b8f08af0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "238f8bc5-d310-463f-a999-fe2a491758ee",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "harrismcc",
+      "messages": [],
+      "total_additions": 1,
+      "total_deletions": 2,
+      "accepted_lines": 1,
+      "overriden_lines": 0
+    }
+  }
+}
