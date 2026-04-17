@@ -5,7 +5,12 @@ import {
   useEffect,
   type DragEvent,
 } from "react";
-import { GoogleGenAI, ThinkingLevel as SDKThinkingLevel, FinishReason } from "@google/genai";
+import {
+  GoogleGenAI,
+  ThinkingLevel as SDKThinkingLevel,
+  FinishReason,
+  type GenerateContentResponseUsageMetadata,
+} from "@google/genai";
 import { z } from "zod/v4";
 
 import { Button } from "@/components/ui/button";
@@ -106,12 +111,10 @@ export default function App() {
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [thinkingText, setThinkingText] = useState("");
   const [thinkingOpen, setThinkingOpen] = useState(false);
-  const [usageMetadata, setUsageMetadata] = useState<{
-    promptTokenCount?: number;
-    candidatesTokenCount?: number;
-    thoughtsTokenCount?: number;
-    totalTokenCount?: number;
-  } | null>(null);
+  const [usageMetadata, setUsageMetadata] = useState<Pick<
+    GenerateContentResponseUsageMetadata,
+    "promptTokenCount" | "candidatesTokenCount" | "thoughtsTokenCount" | "totalTokenCount"
+  > | null>(null);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [promptTemplate, setPromptTemplate] = useState(DEFAULT_PROMPT_TEMPLATE);
   const [model, setModel] = useState(DEFAULT_MODEL);
