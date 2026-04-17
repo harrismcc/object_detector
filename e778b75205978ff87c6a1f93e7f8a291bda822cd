@@ -1,0 +1,62 @@
+src/App.tsx
+  ae7e6105d9561228 8-13,114-117
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.0",
+  "base_commit_sha": "e778b75205978ff87c6a1f93e7f8a291bda822cd",
+  "prompts": {
+    "9d3ffa3922dbf187": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b11b1637-314f-410f-81c6-0ed14a72b948",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "harrismcc",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 8,
+      "overriden_lines": 0
+    },
+    "ae7e6105d9561228": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "49a48bb6-a826-4310-9e24-33a4f37666a0",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "harrismcc",
+      "messages": [],
+      "total_additions": 10,
+      "total_deletions": 7,
+      "accepted_lines": 21,
+      "overriden_lines": 0
+    },
+    "da417c35a079233d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9976e2cf-7ee7-48bd-ac53-f6ad42f159e8",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "harrismcc",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 127,
+      "overriden_lines": 0
+    },
+    "fa868ba46c4e8d8d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "12acda8e-b7ab-4717-b660-71a6f759a5d7",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "harrismcc",
+      "messages": [],
+      "total_additions": 0,
+      "total_deletions": 0,
+      "accepted_lines": 158,
+      "overriden_lines": 0
+    }
+  }
+}
