@@ -54,6 +54,12 @@ const AVAILABLE_MODELS = [
 const THINKING_LEVELS = ["none", "low", "medium", "high"] as const;
 type ThinkingLevel = (typeof THINKING_LEVELS)[number];
 
+const SDK_THINKING_LEVEL_MAP: Record<Exclude<ThinkingLevel, "none">, SDKThinkingLevel> = {
+  low: SDKThinkingLevel.LOW,
+  medium: SDKThinkingLevel.MEDIUM,
+  high: SDKThinkingLevel.HIGH,
+};
+
 type Box = {
   box_2d: [number, number, number, number];
   label: string;
@@ -182,17 +188,11 @@ export default function App() {
         object.trim(),
       );
 
-      const sdkThinkingLevelMap: Record<Exclude<ThinkingLevel, "none">, SDKThinkingLevel> = {
-        low: SDKThinkingLevel.LOW,
-        medium: SDKThinkingLevel.MEDIUM,
-        high: SDKThinkingLevel.HIGH,
-      };
-
       const thinkingConfig =
         thinkingLevel === "none"
           ? undefined
           : {
-              thinkingLevel: sdkThinkingLevelMap[thinkingLevel],
+              thinkingLevel: SDK_THINKING_LEVEL_MAP[thinkingLevel],
               includeThoughts: true,
             };
 
