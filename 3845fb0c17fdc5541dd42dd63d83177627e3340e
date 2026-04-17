@@ -1,0 +1,55 @@
+src/App.tsx
+  d841a530aa098f20 13,23-36,38,40-49,105-109,161-176,178,180-181,187,390-472
+  c165498eabe103e9 11-12,14-22,37,63-64,271-308,317,319,323-325,333-354,358,365,367,370,373-376,387,473-477,491-492,494,500-534
+src/components/ui/input.tsx
+  c165498eabe103e9 1-20
+src/components/ui/textarea.tsx
+  d841a530aa098f20 1-18
+src/components/ui/alert.tsx
+  c165498eabe103e9 1-76
+src/components/ui/collapsible.tsx
+  d841a530aa098f20 1-21
+src/components/ui/label.tsx
+  c165498eabe103e9 1-18
+src/components/ui/select.tsx
+  d841a530aa098f20 1-199
+index.html
+  c165498eabe103e9 2,8
+src/components/ui/slider.tsx
+  d841a530aa098f20 1-52
+src/components/ui/card.tsx
+  c165498eabe103e9 1-103
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.0",
+  "base_commit_sha": "3845fb0c17fdc5541dd42dd63d83177627e3340e",
+  "prompts": {
+    "c165498eabe103e9": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4ffe366f-ada0-4ce4-931c-b5e3fdd3d27d",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "harrismcc",
+      "messages": [],
+      "total_additions": 350,
+      "total_deletions": 117,
+      "accepted_lines": 350,
+      "overriden_lines": 0
+    },
+    "d841a530aa098f20": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4d8982ce-0d21-4f44-b3b3-65de75b10443",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "harrismcc",
+      "messages": [],
+      "total_additions": 427,
+      "total_deletions": 10,
+      "accepted_lines": 424,
+      "overriden_lines": 0
+    }
+  }
+}
