@@ -5,7 +5,7 @@ import {
   useEffect,
   type DragEvent,
 } from "react";
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, ThinkingLevel as SDKThinkingLevel, FinishReason } from "@google/genai";
 import { z } from "zod/v4";
 
 import { Button } from "@/components/ui/button";
@@ -33,7 +33,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { ChevronDown } from "lucide-react";
+import { ChevronDown, Brain, Coins } from "lucide-react";
 
 const DEFAULT_MODEL = "gemma-4-26b-a4b-it";
 const API_KEY_STORAGE = "gemini-api-key";
@@ -104,6 +104,14 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+  const [thinkingText, setThinkingText] = useState("");
+  const [thinkingOpen, setThinkingOpen] = useState(false);
+  const [usageMetadata, setUsageMetadata] = useState<{
+    promptTokenCount?: number;
+    candidatesTokenCount?: number;
+    thoughtsTokenCount?: number;
+    totalTokenCount?: number;
+  } | null>(null);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [promptTemplate, setPromptTemplate] = useState(DEFAULT_PROMPT_TEMPLATE);
   const [model, setModel] = useState(DEFAULT_MODEL);
@@ -156,6 +164,9 @@ export default function App() {
     setError(null);
     setBoxes([]);
     setSelectedIndex(null);
+    setThinkingText("");
+    setThinkingOpen(false);
+    setUsageMetadata(null);
 
     try {
       const base64 = await readFileAsBase64(imageFile);
@@ -168,18 +179,21 @@ export default function App() {
         object.trim(),
       );
 
+      const sdkThinkingLevelMap: Record<Exclude<ThinkingLevel, "none">, SDKThinkingLevel> = {
+        low: SDKThinkingLevel.LOW,
+        medium: SDKThinkingLevel.MEDIUM,
+        high: SDKThinkingLevel.HIGH,
+      };
+
       const thinkingConfig =
         thinkingLevel === "none"
           ? undefined
           : {
-              thinkingLevel: thinkingLevel.toUpperCase() as
-                | "LOW"
-                | "MEDIUM"
-                | "HIGH",
+              thinkingLevel: sdkThinkingLevelMap[thinkingLevel],
               includeThoughts: true,
             };
 
-      const response = await ai.models.generateContent({
+      const stream = await ai.models.generateContentStream({
         model,
         config: {
           temperature,
@@ -196,8 +210,46 @@ export default function App() {
         ],
       });
 
-      const text = response.text ?? "";
-      const jsonMatch = text.match(/\[\s*\{[\s\S]*?\}\s*\]/);
+      let fullText = "";
+      let fullThinking = "";
+      let openedThinking = false;
+
+      for await (const chunk of stream) {
+        const candidate = chunk.candidates?.[0];
+        if (
+          candidate?.finishReason &&
+          candidate.finishReason !== FinishReason.STOP &&
+          candidate.finishReason !== FinishReason.MAX_TOKENS
+        ) {
+          throw new Error(`Model response blocked: ${candidate.finishReason}`);
+        }
+
+        // Accumulate thinking and text from each chunk
+        for (const part of candidate?.content?.parts ?? []) {
+          if (part.thought && part.text) {
+            fullThinking += part.text;
+            setThinkingText(fullThinking);
+            if (!openedThinking) {
+              openedThinking = true;
+              setThinkingOpen(true);
+            }
+          } else if (part.text) {
+            fullText += part.text;
+          }
+        }
+
+        // Capture usage metadata from the final chunk
+        if (chunk.usageMetadata) {
+          setUsageMetadata({
+            promptTokenCount: chunk.usageMetadata.promptTokenCount,
+            candidatesTokenCount: chunk.usageMetadata.candidatesTokenCount,
+            thoughtsTokenCount: chunk.usageMetadata.thoughtsTokenCount,
+            totalTokenCount: chunk.usageMetadata.totalTokenCount,
+          });
+        }
+      }
+
+      const jsonMatch = fullText.match(/\[\s*\{[\s\S]*?\}\s*\]/);
       if (!jsonMatch) {
         throw new Error("No bounding boxes found in model response");
       }
@@ -430,13 +482,13 @@ export default function App() {
           </div>
 
           <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
-            <CollapsibleTrigger asChild>
-              <Button variant="ghost" size="sm" className="gap-2 text-muted-foreground">
-                <ChevronDown
-                  className={`h-4 w-4 transition-transform ${advancedOpen ? "rotate-180" : ""}`}
-                />
-                Advanced Settings
-              </Button>
+            <CollapsibleTrigger
+              render={<Button variant="ghost" size="sm" className="gap-2 text-muted-foreground" />}
+            >
+              <ChevronDown
+                className={`h-4 w-4 transition-transform ${advancedOpen ? "rotate-180" : ""}`}
+              />
+              Advanced Settings
             </CollapsibleTrigger>
             <CollapsibleContent>
               <Card className="mt-2">
@@ -458,7 +510,7 @@ export default function App() {
 
                   <div className="space-y-2">
                     <Label htmlFor="model-select">Model</Label>
-                    <Select value={model} onValueChange={setModel}>
+                    <Select value={model} onValueChange={(v) => { if (v) setModel(v); }}>
                       <SelectTrigger id="model-select">
                         <SelectValue />
                       </SelectTrigger>
@@ -504,7 +556,7 @@ export default function App() {
                       max={2}
                       step={0.05}
                       value={[temperature]}
-                      onValueChange={([v]) => setTemperature(v!)}
+                      onValueChange={(v) => setTemperature(Array.isArray(v) ? v[0]! : v)}
                     />
                   </div>
                 </CardContent>
@@ -518,6 +570,50 @@ export default function App() {
             </Alert>
           )}
 
+          {(thinkingText || usageMetadata) && (
+            <div className="space-y-2">
+              {thinkingText && (
+                <Collapsible open={thinkingOpen} onOpenChange={setThinkingOpen}>
+                  <CollapsibleTrigger
+                    render={<Button variant="ghost" size="sm" className="gap-2 text-muted-foreground" />}
+                  >
+                    <Brain className="h-4 w-4" />
+                    <ChevronDown
+                      className={`h-4 w-4 transition-transform ${thinkingOpen ? "rotate-180" : ""}`}
+                    />
+                    Model Thinking
+                    {loading && (
+                      <div className="w-3 h-3 border-2 border-muted-foreground border-t-transparent rounded-full animate-spin" />
+                    )}
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <Card className="mt-1">
+                      <CardContent className="pt-4">
+                        <pre className="whitespace-pre-wrap text-sm text-muted-foreground font-mono max-h-64 overflow-y-auto">
+                          {thinkingText}
+                        </pre>
+                      </CardContent>
+                    </Card>
+                  </CollapsibleContent>
+                </Collapsible>
+              )}
+
+              {usageMetadata && !loading && (
+                <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                  <Coins className="h-3.5 w-3.5" />
+                  <span>Prompt: {usageMetadata.promptTokenCount?.toLocaleString() ?? "—"} tokens</span>
+                  <span>Output: {usageMetadata.candidatesTokenCount?.toLocaleString() ?? "—"} tokens</span>
+                  {usageMetadata.thoughtsTokenCount != null && usageMetadata.thoughtsTokenCount > 0 && (
+                    <span>Thinking: {usageMetadata.thoughtsTokenCount.toLocaleString()} tokens</span>
+                  )}
+                  <span className="font-medium text-foreground">
+                    Total: {usageMetadata.totalTokenCount?.toLocaleString() ?? "—"} tokens
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="flex gap-6">
             <div className="relative flex-1 min-w-0">
               <img
@@ -529,7 +625,7 @@ export default function App() {
               />
               <canvas ref={canvasRef} className="max-w-full rounded-lg" />
               {loading && (
-                <div className="absolute inset-0 bg-black/50 rounded-lg flex items-center justify-center">
+                <div className="absolute inset-0 bg-background/50 rounded-lg flex items-center justify-center">
                   <Card className="flex-row items-center gap-3 px-5 py-3">
                     <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
                     <span>Detecting {[...objects, objectInput.trim()].filter(Boolean).join(", ")}...</span>
