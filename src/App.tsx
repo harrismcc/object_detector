@@ -352,6 +352,22 @@ export default function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const imgRef = useRef<HTMLImageElement | null>(null);
 
+  // Auto-fill API key from query param
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const keyFromUrl = params.get("apiKey");
+    if (keyFromUrl) {
+      localStorage.setItem(API_KEY_STORAGE, keyFromUrl);
+      setApiKey(keyFromUrl);
+      setReady(true);
+      params.delete("apiKey");
+      const newUrl = params.toString()
+        ? `${window.location.pathname}?${params.toString()}`
+        : window.location.pathname;
+      window.history.replaceState({}, "", newUrl);
+    }
+  }, []);
+
   const saveApiKey = () => {
     if (apiKeyInput.trim()) {
       const key = apiKeyInput.trim();
