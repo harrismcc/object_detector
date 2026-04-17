@@ -6,6 +6,11 @@ import {
   type DragEvent,
 } from "react";
 import {
+  TransformWrapper,
+  TransformComponent,
+  useControls,
+} from "react-zoom-pan-pinch";
+import {
   GoogleGenAI,
   ThinkingLevel as SDKThinkingLevel,
   FinishReason,
@@ -48,6 +53,9 @@ import {
   Crosshair,
   KeyRound,
   ShieldCheck,
+  ZoomIn,
+  ZoomOut,
+  RotateCcw,
 } from "lucide-react";
 
 const DEFAULT_MODEL = "gemma-4-26b-a4b-it";
@@ -61,10 +69,20 @@ const AVAILABLE_MODELS = [
   "gemma-4-31b-it",
 ];
 
-const THINKING_LEVELS = ["none", "low", "medium", "high"] as const;
-type ThinkingLevel = (typeof THINKING_LEVELS)[number];
+const THINKING_LEVELS_GEMINI = ["none", "low", "medium", "high"] as const;
+const THINKING_LEVELS_GEMMA = ["minimal", "high"] as const;
+type ThinkingLevel = "none" | "minimal" | "low" | "medium" | "high";
 
-const SDK_THINKING_LEVEL_MAP: Record<Exclude<ThinkingLevel, "none">, SDKThinkingLevel> = {
+function isGemmaModel(model: string) {
+  return model.startsWith("gemma-");
+}
+
+function getThinkingLevels(model: string) {
+  return isGemmaModel(model) ? THINKING_LEVELS_GEMMA : THINKING_LEVELS_GEMINI;
+}
+
+const SDK_THINKING_LEVEL_MAP: Partial<Record<ThinkingLevel, SDKThinkingLevel>> = {
+  minimal: SDKThinkingLevel.MINIMAL,
   low: SDKThinkingLevel.LOW,
   medium: SDKThinkingLevel.MEDIUM,
   high: SDKThinkingLevel.HIGH,
@@ -88,6 +106,28 @@ const HIGHLIGHT_STROKE = 4;
 const FONT = "bold 13px sans-serif";
 const LABEL_PAD_X = 6;
 const LABEL_PAD_Y = 4;
+
+function ZoomControls() {
+  const { zoomIn, zoomOut, resetTransform, state } = useControls();
+  return (
+    <div className="absolute bottom-2 right-2 z-10 flex items-center gap-1 rounded-lg bg-background/80 p-1 backdrop-blur-sm ring-1 ring-border">
+      <button onClick={() => zoomIn()} className="inline-flex items-center justify-center size-7 rounded-md hover:bg-muted transition-colors" title="Zoom in">
+        <ZoomIn className="size-3.5" />
+      </button>
+      <button onClick={() => resetTransform()} className="min-w-[3rem] text-center font-mono text-[11px] text-muted-foreground tabular-nums hover:text-foreground transition-colors" title="Reset zoom">
+        {Math.round(state.scale * 100)}%
+      </button>
+      <button onClick={() => zoomOut()} className="inline-flex items-center justify-center size-7 rounded-md hover:bg-muted transition-colors" title="Zoom out">
+        <ZoomOut className="size-3.5" />
+      </button>
+      {state.scale !== 1 && (
+        <button onClick={() => resetTransform()} className="inline-flex items-center justify-center size-7 rounded-md hover:bg-muted transition-colors" title="Reset view">
+          <RotateCcw className="size-3.5" />
+        </button>
+      )}
+    </div>
+  );
+}
 
 function readFileAsBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -191,11 +231,12 @@ export default function App() {
         object.trim(),
       );
 
+      const sdkLevel = SDK_THINKING_LEVEL_MAP[thinkingLevel];
       const thinkingConfig =
-        thinkingLevel === "none"
+        thinkingLevel === "none" || !sdkLevel
           ? undefined
           : {
-              thinkingLevel: SDK_THINKING_LEVEL_MAP[thinkingLevel],
+              thinkingLevel: sdkLevel,
               includeThoughts: true,
             };
 
@@ -564,7 +605,14 @@ export default function App() {
 
                     <div className="space-y-1.5">
                       <Label htmlFor="model-select" className="text-xs">Model</Label>
-                      <Select value={model} onValueChange={(v) => { if (v) setModel(v); }}>
+                      <Select value={model} onValueChange={(v) => {
+                          if (!v) return;
+                          setModel(v);
+                          const levels = getThinkingLevels(v);
+                          if (!(levels as readonly string[]).includes(thinkingLevel)) {
+                            setThinkingLevel(levels[levels.length - 1] as ThinkingLevel);
+                          }
+                        }}>
                         <SelectTrigger id="model-select">
                           <SelectValue />
                         </SelectTrigger>
@@ -588,7 +636,7 @@ export default function App() {
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          {THINKING_LEVELS.map((level) => (
+                          {getThinkingLevels(model).map((level) => (
                             <SelectItem key={level} value={level}>
                               {level.charAt(0).toUpperCase() + level.slice(1)}
                             </SelectItem>
@@ -696,10 +744,24 @@ export default function App() {
                     className="hidden"
                     onLoad={onImageLoad}
                   />
-                  <canvas
-                    ref={canvasRef}
-                    className="max-w-4xl w-full rounded-lg"
-                  />
+                  <TransformWrapper
+                    initialScale={1}
+                    minScale={0.25}
+                    maxScale={10}
+                    centerOnInit
+                    wheel={{ step: 0.05 }}
+                  >
+                    <ZoomControls />
+                    <TransformComponent
+                      wrapperClass="!max-w-4xl !w-full rounded-lg"
+                      contentClass="!w-full"
+                    >
+                      <canvas
+                        ref={canvasRef}
+                        className="w-full"
+                      />
+                    </TransformComponent>
+                  </TransformWrapper>
 
                   {/* Loading Overlay (subtle, since status is in the panel above) */}
                   {loading && (
