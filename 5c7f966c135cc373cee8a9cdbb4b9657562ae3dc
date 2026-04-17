@@ -1,0 +1,54 @@
+index.ts
+  411a2061ea8455d2 13
+package.json
+  da417c35a079233d 29
+src/App.tsx
+  411a2061ea8455d2 40-41
+  bd1d1ccc9b3c8e59 100-101,151-154,363-407,410,422-423,535
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.3.0",
+  "base_commit_sha": "5c7f966c135cc373cee8a9cdbb4b9657562ae3dc",
+  "prompts": {
+    "411a2061ea8455d2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "2139ceef-e111-4741-b018-970fbf6894be",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "harrismcc",
+      "messages": [],
+      "total_additions": 5,
+      "total_deletions": 4,
+      "accepted_lines": 3,
+      "overriden_lines": 0
+    },
+    "bd1d1ccc9b3c8e59": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "3b7935f0-2667-42e8-802f-173a88f39d79",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "harrismcc",
+      "messages": [],
+      "total_additions": 55,
+      "total_deletions": 14,
+      "accepted_lines": 55,
+      "overriden_lines": 0
+    },
+    "da417c35a079233d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9976e2cf-7ee7-48bd-ac53-f6ad42f159e8",
+        "model": "claude-opus-4-6"
+      },
+      "human_author": "harrismcc",
+      "messages": [],
+      "total_additions": 1,
+      "total_deletions": 0,
+      "accepted_lines": 1,
+      "overriden_lines": 0
+    }
+  }
+}
