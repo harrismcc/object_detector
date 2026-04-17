@@ -1,0 +1,5 @@
+echo "Running TypeScript type check..."
+bunx tsc --noEmit
+
+echo "Running ESLint..."
+bun run lint
