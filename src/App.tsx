@@ -8,8 +8,45 @@ import {
 import { GoogleGenAI } from "@google/genai";
 import { z } from "zod/v4";
 
-const MODEL = "gemma-4-26b-a4b-it";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  CardContent,
+} from "@/components/ui/card";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Slider } from "@/components/ui/slider";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import { ChevronDown } from "lucide-react";
+
+const DEFAULT_MODEL = "gemma-4-26b-a4b-it";
 const API_KEY_STORAGE = "gemini-api-key";
+const DEFAULT_PROMPT_TEMPLATE = "Detect all {{object}} in the image.";
+
+const AVAILABLE_MODELS = [
+  "gemini-3-flash-preview",
+  "gemma-4-26b-a4b-it",
+  "gemma-4-31b-it",
+];
+
+const THINKING_LEVELS = ["none", "low", "medium", "high"] as const;
+type ThinkingLevel = (typeof THINKING_LEVELS)[number];
 
 type Box = {
   box_2d: [number, number, number, number];
@@ -23,14 +60,8 @@ const BoxSchema = z.object({
 const BoxesSchema = z.array(BoxSchema);
 
 const COLORS = [
-  "#ef4444", // red
-  "#3b82f6", // blue
-  "#22c55e", // green
-  "#f59e0b", // amber
-  "#a855f7", // purple
-  "#06b6d4", // cyan
-  "#ec4899", // pink
-  "#f97316", // orange
+  "#ef4444", "#3b82f6", "#22c55e", "#f59e0b",
+  "#a855f7", "#06b6d4", "#ec4899", "#f97316",
 ];
 const HIGHLIGHT_COLOR = "#facc15";
 const STROKE_WIDTH = 2;
@@ -48,7 +79,6 @@ function readFileAsBase64(file: File): Promise<string> {
     const reader = new FileReader();
     reader.onload = () => {
       const result = reader.result as string;
-      // Strip the data:...;base64, prefix
       resolve(result.split(",")[1]!);
     };
     reader.onerror = reject;
@@ -72,6 +102,11 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [promptTemplate, setPromptTemplate] = useState(DEFAULT_PROMPT_TEMPLATE);
+  const [model, setModel] = useState(DEFAULT_MODEL);
+  const [thinkingLevel, setThinkingLevel] = useState<ThinkingLevel>("high");
+  const [temperature, setTemperature] = useState(1);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const imgRef = useRef<HTMLImageElement | null>(null);
@@ -123,19 +158,33 @@ export default function App() {
 
       const ai = new GoogleGenAI({ apiKey: apiKey.trim() });
 
+      const prompt = promptTemplate.replace(
+        /\{\{object\}\}/g,
+        object.trim(),
+      );
+
+      const thinkingConfig =
+        thinkingLevel === "none"
+          ? undefined
+          : {
+              thinkingLevel: thinkingLevel.toUpperCase() as
+                | "LOW"
+                | "MEDIUM"
+                | "HIGH",
+              includeThoughts: true,
+            };
+
       const response = await ai.models.generateContent({
-        model: MODEL,
+        model,
         config: {
-          temperature: 1,
-          thinkingConfig: {
-            includeThoughts: true,
-          },
+          temperature,
+          ...(thinkingConfig ? { thinkingConfig } : {}),
         },
         contents: [
           {
             role: "user",
             parts: [
-              { text: `Detect all ${object.trim()} in the image.` },
+              { text: prompt },
               { inlineData: { data: base64, mimeType } },
             ],
           },
@@ -219,39 +268,44 @@ export default function App() {
   if (!ready) {
     return (
       <main className="max-w-md mx-auto px-4 py-24">
-        <h1 className="text-3xl font-bold mb-2">Object Detector</h1>
-        <p className="text-gray-400 mb-8">
-          Detect objects in images using the Gemini API. Everything runs 100%
-          in your browser — your images and API key are never sent to any
-          server other than Google's Gemini API directly.
-        </p>
-
-        <label className="block text-sm font-medium text-gray-300 mb-2">
-          Gemini API Key
-        </label>
-        <input
-          type="password"
-          value={apiKeyInput}
-          onChange={(e) => setApiKeyInput(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") saveApiKey();
-          }}
-          placeholder="AIza..."
-          className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 mb-4"
-        />
-        <button
-          onClick={saveApiKey}
-          disabled={!apiKeyInput.trim()}
-          className="w-full bg-blue-600 hover:bg-blue-500 disabled:bg-gray-700 disabled:text-gray-500 px-6 py-2.5 rounded-lg font-medium transition-colors mb-6"
-        >
-          Continue
-        </button>
-
-        <p className="text-xs text-gray-500">
-          Your key is saved in your browser's local storage so you don't have
-          to enter it again. It is never sent anywhere except directly to
-          Google's API from your browser.
-        </p>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-3xl">Object Detector</CardTitle>
+            <CardDescription>
+              Detect objects in images using the Gemini API. Everything runs 100%
+              in your browser — your images and API key are never sent to any
+              server other than Google's Gemini API directly.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="api-key">Gemini API Key</Label>
+              <Input
+                id="api-key"
+                type="password"
+                value={apiKeyInput}
+                onChange={(e) => setApiKeyInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") saveApiKey();
+                }}
+                placeholder="AIza..."
+              />
+            </div>
+            <Button
+              onClick={saveApiKey}
+              disabled={!apiKeyInput.trim()}
+              className="w-full"
+              size="lg"
+            >
+              Continue
+            </Button>
+            <p className="text-xs text-muted-foreground">
+              Your key is saved in your browser's local storage so you don't have
+              to enter it again. It is never sent anywhere except directly to
+              Google's API from your browser.
+            </p>
+          </CardContent>
+        </Card>
       </main>
     );
   }
@@ -260,64 +314,66 @@ export default function App() {
     <main className="max-w-6xl mx-auto px-4 py-12">
       <div className="flex items-center justify-between mb-8">
         <h1 className="text-3xl font-bold">Object Detector</h1>
-        <button
-          onClick={clearApiKey}
-          className="text-sm text-gray-400 hover:text-gray-200 transition-colors"
-        >
+        <Button variant="ghost" size="sm" onClick={clearApiKey}>
           Change API Key
-        </button>
+        </Button>
       </div>
 
       {!imageUrl ? (
-        <div
-          onDragOver={(e) => {
+        <Card
+          className="cursor-pointer transition-colors"
+          onDragOver={(e: DragEvent) => {
             e.preventDefault();
             setDragOver(true);
           }}
           onDragLeave={() => setDragOver(false)}
           onDrop={handleDrop}
           onClick={() => fileInputRef.current?.click()}
-          className={`border-2 border-dashed rounded-xl p-16 text-center cursor-pointer transition-colors ${
-            dragOver
-              ? "border-blue-400 bg-blue-400/10"
-              : "border-gray-600 hover:border-gray-400"
-          }`}
         >
-          <p className="text-lg text-gray-400">
-            Drop an image here or click to upload
-          </p>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) handleFile(file);
-            }}
-          />
-        </div>
+          <CardContent
+            className={`flex items-center justify-center py-16 border-2 border-dashed rounded-xl transition-colors ${
+              dragOver
+                ? "border-primary bg-primary/5"
+                : "border-muted-foreground/25 hover:border-muted-foreground/50"
+            }`}
+          >
+            <p className="text-lg text-muted-foreground">
+              Drop an image here or click to upload
+            </p>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) handleFile(file);
+              }}
+            />
+          </CardContent>
+        </Card>
       ) : (
         <div className="space-y-4">
           <div className="flex gap-3">
-            <input
-              type="text"
+            <Input
               value={object}
               onChange={(e) => setObject(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === "Enter") handleDetect();
               }}
               placeholder="What do you want to detect? (e.g. cars, faces, dogs)"
-              className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
+              className="flex-1"
             />
-            <button
+            <Button
               onClick={handleDetect}
               disabled={loading || !object.trim() || !apiKey.trim()}
-              className="bg-blue-600 hover:bg-blue-500 disabled:bg-gray-700 disabled:text-gray-500 px-6 py-2.5 rounded-lg font-medium transition-colors"
+              size="lg"
             >
               {loading ? "Detecting..." : "Detect"}
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="outline"
+              size="lg"
               onClick={() => {
                 setImageUrl(null);
                 setImageFile(null);
@@ -326,13 +382,99 @@ export default function App() {
                 setError(null);
                 setSelectedIndex(null);
               }}
-              className="bg-gray-800 hover:bg-gray-700 px-4 py-2.5 rounded-lg transition-colors"
             >
               Clear
-            </button>
+            </Button>
           </div>
 
-          {error && <p className="text-red-400 text-sm">{error}</p>}
+          <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
+            <CollapsibleTrigger asChild>
+              <Button variant="ghost" size="sm" className="gap-2 text-muted-foreground">
+                <ChevronDown
+                  className={`h-4 w-4 transition-transform ${advancedOpen ? "rotate-180" : ""}`}
+                />
+                Advanced Settings
+              </Button>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <Card className="mt-2">
+                <CardContent className="grid grid-cols-2 gap-4 pt-4">
+                  <div className="col-span-2 space-y-2">
+                    <Label htmlFor="prompt-template">
+                      Prompt Template{" "}
+                      <span className="text-muted-foreground font-normal">
+                        (use {"{{object}}"} as placeholder)
+                      </span>
+                    </Label>
+                    <Textarea
+                      id="prompt-template"
+                      value={promptTemplate}
+                      onChange={(e) => setPromptTemplate(e.target.value)}
+                      rows={2}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="model-select">Model</Label>
+                    <Select value={model} onValueChange={setModel}>
+                      <SelectTrigger id="model-select">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {AVAILABLE_MODELS.map((m) => (
+                          <SelectItem key={m} value={m}>
+                            {m}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="thinking-select">Thinking Level</Label>
+                    <Select
+                      value={thinkingLevel}
+                      onValueChange={(v) => setThinkingLevel(v as ThinkingLevel)}
+                    >
+                      <SelectTrigger id="thinking-select">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {THINKING_LEVELS.map((level) => (
+                          <SelectItem key={level} value={level}>
+                            {level.charAt(0).toUpperCase() + level.slice(1)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="col-span-2 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="temperature-slider">Temperature</Label>
+                      <span className="text-sm text-muted-foreground tabular-nums">
+                        {temperature.toFixed(2)}
+                      </span>
+                    </div>
+                    <Slider
+                      id="temperature-slider"
+                      min={0}
+                      max={2}
+                      step={0.05}
+                      value={[temperature]}
+                      onValueChange={([v]) => setTemperature(v!)}
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+            </CollapsibleContent>
+          </Collapsible>
+
+          {error && (
+            <Alert variant="destructive">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
 
           <div className="flex gap-6">
             <div className="relative flex-1 min-w-0">
@@ -346,49 +488,50 @@ export default function App() {
               <canvas ref={canvasRef} className="max-w-full rounded-lg" />
               {loading && (
                 <div className="absolute inset-0 bg-black/50 rounded-lg flex items-center justify-center">
-                  <div className="flex items-center gap-3 bg-gray-900 px-5 py-3 rounded-lg">
-                    <div className="w-5 h-5 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+                  <Card className="flex-row items-center gap-3 px-5 py-3">
+                    <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
                     <span>Detecting {object}...</span>
-                  </div>
+                  </Card>
                 </div>
               )}
             </div>
 
             {boxes.length > 0 && (
-              <div className="w-64 shrink-0">
-                <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-3">
-                  Detected ({boxes.length})
-                </h2>
-                <ul className="space-y-1">
-                  {boxes.map((box, i) => {
-                    const isSelected = selectedIndex === i;
-                    return (
-                      <li key={i}>
-                        <button
-                          onClick={() =>
-                            setSelectedIndex(isSelected ? null : i)
-                          }
-                          className={`w-full text-left px-3 py-2 rounded-lg flex items-center gap-3 transition-colors ${
-                            isSelected
-                              ? "bg-yellow-500/20 text-yellow-300"
-                              : "hover:bg-gray-800 text-gray-300"
-                          }`}
-                        >
-                          <span
-                            className="w-3 h-3 rounded-full shrink-0"
-                            style={{
-                              backgroundColor: isSelected
-                                ? HIGHLIGHT_COLOR
-                                : colorForIndex(i),
-                            }}
-                          />
-                          <span className="truncate">{box.label}</span>
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </div>
+              <Card className="w-64 shrink-0 h-fit">
+                <CardHeader>
+                  <CardTitle className="text-sm uppercase tracking-wide text-muted-foreground">
+                    Detected ({boxes.length})
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <ul className="space-y-1">
+                    {boxes.map((box, i) => {
+                      const isSelected = selectedIndex === i;
+                      return (
+                        <li key={i}>
+                          <Button
+                            variant={isSelected ? "secondary" : "ghost"}
+                            className="w-full justify-start gap-3"
+                            onClick={() =>
+                              setSelectedIndex(isSelected ? null : i)
+                            }
+                          >
+                            <span
+                              className="w-3 h-3 rounded-full shrink-0"
+                              style={{
+                                backgroundColor: isSelected
+                                  ? HIGHLIGHT_COLOR
+                                  : colorForIndex(i),
+                              }}
+                            />
+                            <span className="truncate">{box.label}</span>
+                          </Button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </CardContent>
+              </Card>
             )}
           </div>
         </div>
